@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import MenuCard from "../components/MenuCard";
 import SpecialsBanner from "../components/SpecialsBanner";
 
-const GOOGLE_REVIEW_URL = "https://www.google.com/maps/search/?api=1&query=Tierra+Organic+Bistrot+Cafe+Via+Tirso+34+Roma";
+const GOOGLE_REVIEW_URL = "https://share.google/eVhM03mToB5eMlaWw";
 
 const MenuPage = () => {
     const [categories, setCategories] = useState([]);
