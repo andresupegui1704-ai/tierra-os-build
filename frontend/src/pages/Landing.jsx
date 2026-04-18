@@ -8,9 +8,9 @@ import SpecialsBanner from "../components/SpecialsBanner";
 const LOGO = "/brand/tierra-logo.png";
 const POKE = "https://images.unsplash.com/photo-1759922222212-3657d43bd5b5?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
 const WOOD = "https://images.unsplash.com/photo-1514944040828-c79f6cd6eb43?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600";
-const AVOCADO = "https://images.unsplash.com/photo-1638720772346-b745bcd72f5f?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
-const VEGGIES = "https://images.unsplash.com/photo-1757332051150-a5b3c4510af8?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
-const INTERIOR = "https://images.unsplash.com/photo-1552566626-52f8b828add9?crop=entropy&cs=srgb&fm=jpg&q=85&w=1400";
+const BANCO = "/gallery/banco.webp";
+const TAVOLO = "/gallery/tavolo.webp";
+const SALA = "/gallery/sala.webp";
 
 const Pillar = ({ icon: Icon, title, children }) => (
     <div className="p-8 rounded-2xl bg-[#FFFDF7] border border-[#8A5B3D]/10 hover:border-[#8A5B3D]/30 transition-colors">
@@ -53,10 +53,11 @@ const Landing = () => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.8, delay: 0.4 }}
-                        className="h-display text-5xl sm:text-6xl lg:text-7xl mt-12 text-[#2C2418]"
+                        className="h-display text-4xl sm:text-5xl lg:text-6xl mt-12 text-[#2C2418] leading-[1.1]"
                     >
-                        La cucina <span className="italic text-[#8A5B3D]">biologica</span>
-                        <br/>che sa di <span className="italic text-[#7C9A4A]">casa</span>.
+                        Benvenuti da <span className="italic text-[#8A5B3D]">Tierra</span>,
+                        <br/>un bistrot biologico <span className="italic text-[#7C9A4A]">che sa di casa</span>
+                        <br/>con prodotti assolutamente organici.
                     </motion.h1>
                     <motion.p
                         initial={{ opacity: 0 }}
@@ -64,8 +65,8 @@ const Landing = () => {
                         transition={{ duration: 0.8, delay: 0.7 }}
                         className="mt-8 text-lg text-[#5C4E3C] max-w-2xl mx-auto leading-relaxed"
                     >
-                        Un bistrot & caffetteria biologico in Via Tirso 34. Ogni piatto è una piccola celebrazione
-                        della terra — ingredienti di stagione, materie prime tracciate, ricette cucinate a vista.
+                        Ingredienti di stagione, materie prime tracciate, ricette cucinate a vista —
+                        ti aspettiamo in Via Tirso 34, a Roma.
                     </motion.p>
 
                     <motion.div
@@ -104,7 +105,7 @@ const Landing = () => {
             {/* HERO v2 — Logo lockup on dark photo (a second visual moment) */}
             <section className="relative">
                 <div className="relative h-[60vh] min-h-[420px] overflow-hidden">
-                    <img src={INTERIOR} alt="Interni Tierra" className="absolute inset-0 w-full h-full object-cover" />
+                    <img src={SALA} alt="Interni Tierra" className="absolute inset-0 w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-r from-[#2C2418]/85 via-[#2C2418]/55 to-transparent" />
                     <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center">
                         <div className="max-w-xl">
@@ -197,7 +198,7 @@ const Landing = () => {
 
             {/* DUAL IMAGE BLOCK */}
             <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                <img src={AVOCADO} alt="Colazione biologica" className="w-full aspect-[4/5] object-cover rounded-3xl" />
+                <img src={BANCO} alt="Il banco di Tierra Organic Bistrot Café" className="w-full aspect-[4/5] object-cover rounded-3xl" />
                 <div>
                     <p className="overline">Delivery · Asporto · Sul posto</p>
                     <h2 className="h-display text-4xl sm:text-5xl mt-4">
@@ -234,7 +235,7 @@ const Landing = () => {
                             </a>
                         </div>
                     </div>
-                    <img src={VEGGIES} alt="Verdure organiche" className="w-full aspect-[4/5] object-cover rounded-3xl" />
+                    <img src={TAVOLO} alt="Tavolo apparecchiato con candela al Tierra" className="w-full aspect-[4/5] object-cover rounded-3xl" />
                 </div>
             </section>
         </div>
