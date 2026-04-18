@@ -16,6 +16,7 @@ from models import (
     MenuItem, MenuItemCreate, MenuItemUpdate, CustomizationGroup,
     OrderCreate, Order, ReservationCreate, Reservation,
     CheckoutRequest, PaymentTransaction, AdminLogin, AdminToken,
+    _now_iso,
 )
 from seed_data import CATEGORIES, ITEMS
 from customizations import bowl_groups, secondo_groups, CUSTOMIZATION_VERSION
@@ -331,8 +332,30 @@ async def create_order(payload: OrderCreate, request: Request):
         notes=payload.notes,
         subtotal=round(subtotal, 2),
         total=total,
+        marketing_consent=bool(payload.marketing_consent),
+        consent_date=_now_iso() if payload.marketing_consent else None,
     )
     await db.orders.insert_one(order.model_dump())
+
+    # Upsert marketing subscriber if opted-in
+    if payload.marketing_consent:
+        await db.marketing_subscribers.update_one(
+            {"email": payload.customer_email.lower()},
+            {
+                "$set": {
+                    "email": payload.customer_email.lower(),
+                    "name": payload.customer_name,
+                    "phone": payload.customer_phone,
+                    "last_consent_at": _now_iso(),
+                    "active": True,
+                },
+                "$setOnInsert": {
+                    "first_consent_at": _now_iso(),
+                },
+                "$inc": {"orders_count": 1},
+            },
+            upsert=True,
+        )
     return order
 
 
@@ -675,6 +698,101 @@ async def _enqueue_print(order_id: str) -> None:
 async def admin_print_queue(_: str = Depends(require_admin)):
     rows = await db.print_queue.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
     return rows
+
+
+# ---------- Statistics ----------
+@api.get("/admin/stats/sales")
+async def admin_sales_stats(
+    start: Optional[str] = None,  # ISO date or datetime
+    end: Optional[str] = None,
+    _: str = Depends(require_admin),
+):
+    """
+    Aggregate sales per menu item within [start, end].
+    Only paid orders are counted. Returns totals + per-item breakdown sorted by quantity.
+    """
+    match: dict = {"payment_status": "paid"}
+    if start or end:
+        created_range: dict = {}
+        if start:
+            created_range["$gte"] = start
+        if end:
+            created_range["$lte"] = end
+        if created_range:
+            match["created_at"] = created_range
+
+    pipeline = [
+        {"$match": match},
+        {"$unwind": "$items"},
+        {
+            "$group": {
+                "_id": {"item_id": "$items.item_id", "name": "$items.name"},
+                "quantity": {"$sum": "$items.quantity"},
+                "revenue": {
+                    "$sum": {
+                        "$ifNull": ["$items.line_total", {"$multiply": ["$items.price", "$items.quantity"]}]
+                    }
+                },
+                "orders": {"$addToSet": "$_id"},
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "item_id": "$_id.item_id",
+                "name": "$_id.name",
+                "quantity": 1,
+                "revenue": {"$round": ["$revenue", 2]},
+                "orders_count": {"$size": "$orders"},
+            }
+        },
+        {"$sort": {"quantity": -1}},
+    ]
+    items_agg = await db.orders.aggregate(pipeline).to_list(1000)
+
+    # Top-level totals
+    totals_pipeline = [
+        {"$match": match},
+        {
+            "$group": {
+                "_id": None,
+                "orders": {"$sum": 1},
+                "revenue": {"$sum": "$total"},
+                "avg_ticket": {"$avg": "$total"},
+            }
+        },
+    ]
+    totals_rows = await db.orders.aggregate(totals_pipeline).to_list(1)
+    totals = totals_rows[0] if totals_rows else {"orders": 0, "revenue": 0, "avg_ticket": 0}
+    return {
+        "start": start,
+        "end": end,
+        "totals": {
+            "orders": totals.get("orders", 0),
+            "revenue": round(float(totals.get("revenue") or 0), 2),
+            "avg_ticket": round(float(totals.get("avg_ticket") or 0), 2),
+        },
+        "items": items_agg,
+    }
+
+
+# ---------- Marketing subscribers ----------
+@api.get("/admin/marketing/subscribers")
+async def admin_marketing_subscribers(_: str = Depends(require_admin)):
+    rows = await db.marketing_subscribers.find(
+        {"active": True}, {"_id": 0}
+    ).sort("last_consent_at", -1).to_list(2000)
+    return rows
+
+
+@api.delete("/admin/marketing/subscribers/{email}")
+async def admin_marketing_unsubscribe(email: str, _: str = Depends(require_admin)):
+    res = await db.marketing_subscribers.update_one(
+        {"email": email.lower()}, {"$set": {"active": False, "unsubscribed_at": _now_iso()}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Iscritto non trovato")
+    return {"ok": True}
 
 
 # Include + CORS

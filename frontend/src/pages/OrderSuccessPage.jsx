@@ -10,6 +10,7 @@ const OrderSuccessPage = () => {
     const orderId = sp.get("order_id");
     const [status, setStatus] = useState("polling"); // polling | paid | failed | expired
     const [order, setOrder] = useState(null);
+    const [isFirstOrder, setIsFirstOrder] = useState(false);
     const attempts = useRef(0);
 
     useEffect(() => {
@@ -25,6 +26,17 @@ const OrderSuccessPage = () => {
                     if (orderId) {
                         const { data: o } = await api.get(`/orders/${orderId}`);
                         setOrder(o);
+                        // Detect first order: has this email ordered before on this device?
+                        try {
+                            const seen = JSON.parse(localStorage.getItem("tierra_reviewed_emails") || "[]");
+                            const email = (o?.customer_email || "").toLowerCase().trim();
+                            const first = !!email && !seen.includes(email);
+                            setIsFirstOrder(first);
+                            if (first && email) {
+                                seen.push(email);
+                                localStorage.setItem("tierra_reviewed_emails", JSON.stringify(seen));
+                            }
+                        } catch { /* ignore */ }
                     }
                     return;
                 }
@@ -95,7 +107,7 @@ const OrderSuccessPage = () => {
                     </div>
                 </div>
 
-                {status === "paid" && (
+                {status === "paid" && isFirstOrder && (
                     <div className="mt-6">
                         <ReviewCTACard variant="light" testId="success-review-cta" />
                     </div>

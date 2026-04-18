@@ -135,6 +135,7 @@ class OrderCreate(BaseModel):
     scheduled_time: Optional[str] = None  # ISO string for pickup/delivery
     notes: Optional[str] = None
     origin_url: str
+    marketing_consent: bool = False  # GDPR opt-in for WhatsApp/email offers
 
 
 class Order(BaseModel):
@@ -154,6 +155,8 @@ class Order(BaseModel):
     payment_status: str = "initiated"  # initiated | paid | failed | expired
     stripe_session_id: Optional[str] = None
     created_at: str = Field(default_factory=_now_iso)
+    marketing_consent: bool = False
+    consent_date: Optional[str] = None
 
 
 # ---------- Reservations ----------

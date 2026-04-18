@@ -40,7 +40,21 @@ Polls `/api/payments/status/{session_id}` every 2s (max 10 tries). Displays rece
 Shadcn Calendar + Select (time slots + guests 1–14). Success screen on submit. Admin notification + user confirmation emails.
 
 ### Admin (`/admin`)
-Login → Dashboard with tabs: **Menù** (Switch per disponibilità + inline price edit), **Ordini**, **Prenotazioni**.
+Login → Dashboard with tabs: **Menù** (Switch disponibilità + inline price edit + CRUD + Special del Giorno + toggle per ingrediente), **Ordini** (badge consenso marketing), **Prenotazioni**, **Statistiche** (KPI + ranking piatti + export CSV, filtri Oggi/7g/30g/Mese/Mese scorso/Sempre), **Marketing** (iscritti opt-in + disiscrizione + export CSV), **Stampante**.
+
+### Google Review CTA (added 2026-04-18)
+Componente `ReviewCTA` riutilizzabile (`ReviewCTACard` + `ReviewCTABanner`). Link: `https://share.google/eVhM03mToB5eMlaWw`. Presente in:
+- Menu top (banner compatto, sempre visibile)
+- Menu bottom (card piena)
+- Landing prima del footer (card piena)
+- Order success (card piena, **solo al primo ordine** — detected via `localStorage.tierra_reviewed_emails`)
+
+### Marketing consent (GDPR opt-in, added 2026-04-18)
+Checkbox discreto nel Checkout: "Voglio ricevere offerte, menù del giorno e novità via email/WhatsApp". Salvato su `orders.marketing_consent` + `orders.consent_date`. Upsert su collection `marketing_subscribers` (email as key, orders_count incrementato, active flag).
+
+### Sales statistics (added 2026-04-18)
+Endpoint `GET /api/admin/stats/sales?start=&end=` — aggrega quantità e ricavato per piatto sugli ordini con `payment_status=paid`. Ritorna totali (orders, revenue, avg_ticket) + array items ordinato per quantità desc.
+Endpoint `GET /api/admin/marketing/subscribers` + `DELETE /api/admin/marketing/subscribers/{email}`.
 
 ## Test Credentials
 In `/app/memory/test_credentials.md`
@@ -48,15 +62,13 @@ In `/app/memory/test_credentials.md`
 ## Testing
 - 27/27 backend pytest pass (`/app/backend/tests/backend_test.py`)
 - Frontend flows verified by `testing_agent_v3` iteration 1
+- Stats/marketing endpoints smoke-tested via curl (2026-04-18)
 
 ## Prioritized Backlog (Phase 2+)
 - **P0** Real Resend API key from user → activate transactional emails
-- **P1** WhatsApp chatbot + daily promos via Twilio (requires numero Meta approvato)
+- **P0** Sunmi printer IP from user → activate receipt printing
+- **P1** WhatsApp chatbot + promo giornaliere via Twilio (invio promo ai `marketing_subscribers` attivi)
 - **P1** PayPal integration (Client ID)
-- **P2** Admin: add/edit/delete menu items from UI (currently only toggle + price edit)
-- **P2** Admin: upload immagini piatti (object storage)
-- **P2** Newsletter form + segmented daily promo email
-- **P2** Google Maps embed in contact section
+- **P2** Refactor `server.py` (>700 lines) in FastAPI routers
 - **P3** Multi-language toggle (IT/EN)
-- **P3** Reviews/testimonials section
 - **P3** Loyalty program (punti Tierra)

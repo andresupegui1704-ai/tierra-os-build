@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { UtensilsCrossed, ShoppingBag, CalendarDays, LogOut, Edit2, Check, X, Plus, Trash2, Printer, Download, RefreshCw, Sparkles } from "lucide-react";
+import { UtensilsCrossed, ShoppingBag, CalendarDays, LogOut, Edit2, Check, X, Plus, Trash2, Printer, Download, RefreshCw, Sparkles, BarChart3, Megaphone } from "lucide-react";
 import { Switch } from "../components/ui/switch";
 import { api } from "../lib/api";
 import MenuItemDialog from "../components/MenuItemDialog";
 import CustomizationOptionsPanel from "../components/CustomizationOptionsPanel";
+import { StatsPanel, MarketingPanel } from "../components/admin/StatsAndMarketing";
 
 const Sidebar = ({ active, onNav, onLogout }) => (
     <aside className="fixed left-0 top-0 bottom-0 w-64 bg-[#2C2418] text-[#F5EFE2] p-6 hidden lg:flex flex-col">
@@ -21,6 +22,8 @@ const Sidebar = ({ active, onNav, onLogout }) => (
                 { id: "menu", icon: UtensilsCrossed, label: "Menù" },
                 { id: "orders", icon: ShoppingBag, label: "Ordini" },
                 { id: "reservations", icon: CalendarDays, label: "Prenotazioni" },
+                { id: "stats", icon: BarChart3, label: "Statistiche" },
+                { id: "marketing", icon: Megaphone, label: "Marketing" },
                 { id: "printer", icon: Printer, label: "Stampante" },
             ].map((it) => (
                 <button key={it.id} data-testid={`sidebar-${it.id}`} onClick={() => onNav(it.id)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${active === it.id ? "bg-white/10 text-[#A5B276]" : "hover:bg-white/5"}`}>
@@ -131,7 +134,7 @@ const AdminDashboard = () => {
             <Sidebar active={tab} onNav={setTab} onLogout={logout} />
             <main className="lg:ml-64 p-6 lg:p-10">
                 <div className="flex gap-2 mb-8 lg:hidden overflow-x-auto">
-                    {[["menu","Menù"],["orders","Ordini"],["reservations","Prenot."],["printer","Stampante"]].map(([id,label]) => (
+                    {[["menu","Menù"],["orders","Ordini"],["reservations","Prenot."],["stats","Stats"],["marketing","Marketing"],["printer","Stampante"]].map(([id,label]) => (
                         <button key={id} onClick={() => setTab(id)} data-testid={`mobile-tab-${id}`} className={`px-4 py-2 rounded-full text-sm whitespace-nowrap ${tab === id ? "bg-[#7C9A4A] text-[#FFFDF7]" : "bg-white border border-[#8A5B3D]/20"}`}>{label}</button>
                     ))}
                     <button onClick={logout} className="px-4 py-2 rounded-full text-sm bg-white border border-[#8A5B3D]/20">Esci</button>
@@ -218,6 +221,11 @@ const AdminDashboard = () => {
                                     </ul>
                                     {o.delivery_address && <p className="mt-2 text-xs text-[#5C4E3C]">📍 {o.delivery_address}</p>}
                                     {o.notes && <p className="mt-1 text-xs text-[#5C4E3C] italic">Note: {o.notes}</p>}
+                                    {o.marketing_consent && (
+                                        <p className="mt-2 text-[11px] inline-flex items-center gap-1 bg-[#C89B3C]/15 text-[#8A6A14] px-2 py-0.5 rounded-full">
+                                            <Megaphone size={10} /> Consenso marketing
+                                        </p>
+                                    )}
                                     <div className="mt-4 pt-3 border-t border-[#8A5B3D]/10 flex justify-end">
                                         <button data-testid={`reprint-${o.id}`} onClick={() => reprintOrder(o.id)} className="inline-flex items-center gap-2 text-xs text-[#8A5B3D] hover:text-[#6F4527]"><Printer size={14} /> Ristampa comanda</button>
                                     </div>
@@ -251,6 +259,8 @@ const AdminDashboard = () => {
                 )}
 
                 {tab === "printer" && <PrinterPanel queue={printQueue} onRefresh={loadPrintQueue} />}
+                {tab === "stats" && <StatsPanel />}
+                {tab === "marketing" && <MarketingPanel />}
             </main>
         </div>
     );

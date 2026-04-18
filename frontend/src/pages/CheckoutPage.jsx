@@ -27,6 +27,7 @@ const CheckoutPage = () => {
         customer_name: "", customer_phone: "", customer_email: "",
         delivery_address: "", scheduled_time: "", notes: "",
     });
+    const [marketingConsent, setMarketingConsent] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     const update = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -61,6 +62,7 @@ const CheckoutPage = () => {
                 scheduled_time: form.scheduled_time || null,
                 notes: form.notes || null,
                 origin_url: window.location.origin,
+                marketing_consent: marketingConsent,
             };
             const { data: order } = await api.post("/orders", payload);
             const { data: session } = await api.post("/payments/checkout", {
@@ -68,6 +70,15 @@ const CheckoutPage = () => {
                 origin_url: window.location.origin,
             });
             clear();
+            // Remember email locally to hide the "first order" review CTA on repeat purchases
+            try {
+                const seen = JSON.parse(localStorage.getItem("tierra_customer_emails") || "[]");
+                const normalized = (form.customer_email || "").toLowerCase().trim();
+                if (normalized && !seen.includes(normalized)) {
+                    seen.push(normalized);
+                    localStorage.setItem("tierra_customer_emails", JSON.stringify(seen));
+                }
+            } catch { /* ignore storage errors */ }
             window.location.href = session.url;
         } catch (err) {
             toast.error(err?.response?.data?.detail || "Errore durante l'ordine");
@@ -111,6 +122,23 @@ const CheckoutPage = () => {
                                     <textarea data-testid="checkout-notes" value={form.notes} onChange={update("notes")} rows={3} className="w-full rounded-xl bg-[#F9F6F0] border-transparent focus:border-[#2B4A33] focus:ring-1 focus:ring-[#2B4A33] px-4 py-3 text-sm" />
                                 </div>
                             </div>
+
+                            {/* Marketing consent — discreet */}
+                            <label className="mt-5 flex items-start gap-3 p-4 rounded-xl bg-[#F9F6F0] border border-[#2B4A33]/10 cursor-pointer hover:border-[#2B4A33]/25 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    data-testid="marketing-consent-checkbox"
+                                    checked={marketingConsent}
+                                    onChange={(e) => setMarketingConsent(e.target.checked)}
+                                    className="mt-0.5 h-4 w-4 rounded border-[#2B4A33]/30 text-[#7C9A4A] focus:ring-[#7C9A4A]"
+                                />
+                                <span className="text-xs text-[#5C4E3C] leading-relaxed">
+                                    Voglio ricevere <strong>offerte, menù del giorno e novità</strong> da Tierra via email o WhatsApp.
+                                    <span className="block mt-1 text-[11px] text-[#8A9486]">
+                                        Potrai disiscriverti in qualsiasi momento. I tuoi dati non saranno condivisi con terzi.
+                                    </span>
+                                </span>
+                            </label>
                         </section>
                     </div>
 
