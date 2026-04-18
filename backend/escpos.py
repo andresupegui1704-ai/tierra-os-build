@@ -32,10 +32,13 @@ def _line(left: str, right: str, width: int = 42) -> bytes:
     return left_b + b" " * pad + right_b + b"\n"
 
 
-def build_order_ticket(order: dict) -> bytes:
+def build_order_ticket(order: dict, copy_label: str = "") -> bytes:
     """Build a restaurant order ticket (comanda)."""
     out = bytearray()
     out += INIT
+    # Copy label (if provided, e.g. "COPIA 1/2")
+    if copy_label:
+        out += ALIGN_CENTER + BOLD_ON + copy_label.encode("cp858") + b"\n" + BOLD_OFF
     # Header
     out += ALIGN_CENTER + BOLD_ON + DOUBLE_HW
     out += b"TIERRA\n"
@@ -118,6 +121,10 @@ def build_order_ticket(order: dict) -> bytes:
     return bytes(out)
 
 
-def encode_job(order: dict) -> str:
-    """Return a base64-encoded ESC/POS payload."""
-    return base64.b64encode(build_order_ticket(order)).decode("ascii")
+def encode_job(order: dict, copies: int = 2) -> str:
+    """Return a base64-encoded ESC/POS payload with N labelled copies (default 2: kitchen + counter)."""
+    out = bytearray()
+    for i in range(copies):
+        label = f"COPIA {i + 1}/{copies}" if copies > 1 else ""
+        out += build_order_ticket(order, copy_label=label)
+    return base64.b64encode(bytes(out)).decode("ascii")
