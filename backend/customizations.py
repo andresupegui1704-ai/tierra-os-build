@@ -6,7 +6,7 @@ al prossimo startup (eventuali edit admin degli item affetti andranno persi).
 """
 from typing import List, Dict
 
-CUSTOMIZATION_VERSION = 2  # v2: proteine a pagamento (€2/€3)
+CUSTOMIZATION_VERSION = 3  # v3: Secondo proteine 2 incluse (€0), extra a prezzo pieno
 
 # Basi di carboidrati — incluse nel prezzo della bowl
 CARBS: List[Dict] = [
@@ -80,19 +80,24 @@ def bowl_groups() -> List[Dict]:
     ]
 
 
+def _proteins_free() -> List[Dict]:
+    """Stessa paletta di proteine ma con price_delta=0 (incluse)."""
+    return [{**p, "price_delta": 0.0} for p in PROTEINS]
+
+
 def secondo_groups() -> List[Dict]:
-    """Gruppi per Secondo con Contorno (2 proteine)."""
+    """Gruppi per Secondo con Contorno — 2 proteine incluse, ulteriori a prezzo pieno."""
     return [
         {
-            "name": "Proteine (scegli 2)",
-            "description": "Seleziona esattamente 2 proteine",
+            "name": "Proteine incluse (scegli 2)",
+            "description": "Due proteine a scelta, incluse nel prezzo",
             "selection_type": "multiple",
             "min_select": 2, "max_select": 2, "required": True,
-            "options": list(PROTEINS),
+            "options": _proteins_free(),
         },
         {
             "name": "Proteina extra",
-            "description": "Vuoi aggiungere un'altra proteina?",
+            "description": "Vuoi aggiungere altre proteine? Pesce +€3 · Carne/Veg +€2",
             "selection_type": "multiple",
             "min_select": 0, "max_select": 3, "required": False,
             "options": list(PROTEINS),
