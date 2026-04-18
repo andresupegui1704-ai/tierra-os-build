@@ -3,12 +3,18 @@ import { toast } from "sonner";
 import { Upload, Image as ImageIcon, X } from "lucide-react";
 import { api, API } from "../lib/api";
 
-/**
- * ImageUploader — drag-drop or click to upload. Returns public image URL via onChange.
- */
-const ImageUploader = ({ value, onChange, testid = "image-uploader" }) => {
+const USAGE_HINTS = {
+    dish:     { label: "Foto piatto", size: "800 × 800 px · 1:1 quadrato", ratio: "aspect-square" },
+    hero:     { label: "Banner / hero", size: "1920 × 1080 px · 16:9 orizzontale", ratio: "aspect-video" },
+    interior: { label: "Interno locale", size: "1400 × 900 px · 3:2 orizzontale", ratio: "aspect-[3/2]" },
+    team:     { label: "Team / chef", size: "600 × 800 px · 3:4 verticale", ratio: "aspect-[3/4]" },
+    free:     { label: "Immagine libera", size: "max 1600 px lato lungo", ratio: "aspect-square" },
+};
+
+const ImageUploader = ({ value, onChange, usage = "dish", testid = "image-uploader" }) => {
     const [uploading, setUploading] = useState(false);
     const inputRef = useRef(null);
+    const hint = USAGE_HINTS[usage] || USAGE_HINTS.free;
 
     const handleFile = async (file) => {
         if (!file) return;
@@ -18,12 +24,13 @@ const ImageUploader = ({ value, onChange, testid = "image-uploader" }) => {
         try {
             const form = new FormData();
             form.append("file", file);
+            form.append("usage", usage);
             const { data } = await api.post("/admin/uploads", form, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
             const fullUrl = `${API}/files/${data.id}`;
             onChange(fullUrl);
-            toast.success("Foto caricata");
+            toast.success(`Foto caricata · ottimizzata in WebP ${Math.round((data.size || 0) / 1024)} KB`);
         } catch (e) {
             toast.error(e?.response?.data?.detail || "Upload fallito");
         } finally {
@@ -34,7 +41,7 @@ const ImageUploader = ({ value, onChange, testid = "image-uploader" }) => {
     return (
         <div data-testid={testid} className="flex items-start gap-4">
             {value ? (
-                <div className="relative w-32 h-32 rounded-xl overflow-hidden border border-[#8A5B3D]/15">
+                <div className={`relative w-32 ${hint.ratio} rounded-xl overflow-hidden border border-[#8A5B3D]/15`}>
                     <img src={value} alt="preview" className="w-full h-full object-cover" />
                     <button
                         type="button"
@@ -45,7 +52,7 @@ const ImageUploader = ({ value, onChange, testid = "image-uploader" }) => {
                     ><X size={14} /></button>
                 </div>
             ) : (
-                <div className="w-32 h-32 rounded-xl border-2 border-dashed border-[#8A5B3D]/30 flex items-center justify-center text-[#9B8E7A]">
+                <div className={`w-32 ${hint.ratio} rounded-xl border-2 border-dashed border-[#8A5B3D]/30 flex items-center justify-center text-[#9B8E7A]`}>
                     <ImageIcon size={28} strokeWidth={1.3} />
                 </div>
             )}
@@ -59,7 +66,8 @@ const ImageUploader = ({ value, onChange, testid = "image-uploader" }) => {
                 >
                     <Upload size={16} /> {uploading ? "Caricamento..." : value ? "Sostituisci" : "Carica foto"}
                 </button>
-                <p className="text-xs text-[#9B8E7A] mt-2">JPG · PNG · WEBP · max 8 MB</p>
+                <p className="text-xs text-[#9B8E7A] mt-2"><strong>{hint.label}:</strong> {hint.size}</p>
+                <p className="text-[11px] text-[#9B8E7A]">Conversione automatica in WebP · sRGB · max 8 MB</p>
                 <input
                     ref={inputRef}
                     type="file"

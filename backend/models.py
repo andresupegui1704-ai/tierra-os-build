@@ -51,6 +51,7 @@ class MenuItem(BaseModel):
     description: Optional[str] = None
     price: float
     image_url: Optional[str] = None
+    image_alt: Optional[str] = None
     badge: Optional[str] = None  # e.g. "Il più scelto", "Consigliato dallo Chef"
     available: bool = True
     order: int = 0
@@ -61,6 +62,7 @@ class MenuItemUpdate(BaseModel):
     description: Optional[str] = None
     price: Optional[float] = None
     image_url: Optional[str] = None
+    image_alt: Optional[str] = None
     badge: Optional[str] = None
     available: Optional[bool] = None
     order: Optional[int] = None
@@ -73,6 +75,7 @@ class MenuItemCreate(BaseModel):
     description: Optional[str] = None
     price: float
     image_url: Optional[str] = None
+    image_alt: Optional[str] = None
     badge: Optional[str] = None
     available: bool = True
     order: int = 0

@@ -22,6 +22,7 @@ from email_service import send_order_confirmation, send_reservation_confirmation
 from auth import verify_admin, create_token, require_admin
 import storage as obj_storage
 import escpos
+import image_utils
 
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionRequest,
@@ -429,17 +430,22 @@ _MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB
 
 
 @api.post("/admin/uploads")
-async def admin_upload_image(file: UploadFile = File(...), _: str = Depends(require_admin)):
+async def admin_upload_image(file: UploadFile = File(...), usage: str = Form("dish"), _: str = Depends(require_admin)):
     if file.content_type not in _ALLOWED_MIME:
         raise HTTPException(status_code=400, detail="Formato non supportato. Usa JPG, PNG, WEBP o GIF.")
     data = await file.read()
     if len(data) > _MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=400, detail="File troppo grande (max 8 MB)")
-    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "bin"
-    file_id = str(uuid.uuid4())
-    path = f"{_APP_NAME}/menu/{file_id}.{ext}"
+    # Process: resize + convert to WebP per la guida Tierra
     try:
-        result = await asyncio.to_thread(obj_storage.put_object, path, data, file.content_type)
+        processed, content_type = await asyncio.to_thread(image_utils.process_image, data, usage)
+    except Exception as e:
+        logger.error(f"Image processing failed: {e}")
+        raise HTTPException(status_code=400, detail="Immagine non valida o corrotta")
+    file_id = str(uuid.uuid4())
+    path = f"{_APP_NAME}/{usage}/{file_id}.webp"
+    try:
+        result = await asyncio.to_thread(obj_storage.put_object, path, processed, content_type)
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=502, detail="Caricamento fallito, riprova")
@@ -447,12 +453,13 @@ async def admin_upload_image(file: UploadFile = File(...), _: str = Depends(requ
         "id": file_id,
         "storage_path": result["path"],
         "filename": file.filename,
-        "content_type": file.content_type,
-        "size": result.get("size", len(data)),
+        "content_type": content_type,
+        "size": result.get("size", len(processed)),
+        "usage": usage,
         "is_deleted": False,
-        "created_at": obj_storage.__dict__.get("_noop", None) or __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        "created_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
     })
-    return {"id": file_id, "url": f"/api/files/{file_id}", "path": result["path"]}
+    return {"id": file_id, "url": f"/api/files/{file_id}", "path": result["path"], "usage": usage, "size": result.get("size", len(processed))}
 
 
 @api.get("/files/{file_id}")

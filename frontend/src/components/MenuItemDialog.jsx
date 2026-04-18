@@ -43,6 +43,7 @@ const MenuItemDialog = ({ open, onOpenChange, categories, item, onSaved }) => {
                 price,
                 category_slug: form.category_slug,
                 image_url: form.image_url || null,
+                image_alt: form.image_alt.trim() || null,
                 badge: form.badge.trim() || null,
                 available: !!form.available,
                 order: parseInt(form.order || 0, 10),
@@ -73,7 +74,13 @@ const MenuItemDialog = ({ open, onOpenChange, categories, item, onSaved }) => {
                 <div className="space-y-5 py-2">
                     <div>
                         <label className="overline block mb-2">Foto del piatto</label>
-                        <ImageUploader value={form.image_url || null} onChange={(url) => setForm((f) => ({ ...f, image_url: url || "" }))} testid="item-image-uploader" />
+                        <ImageUploader usage="dish" value={form.image_url || null} onChange={(url) => setForm((f) => ({ ...f, image_url: url || "" }))} testid="item-image-uploader" />
+                        {form.image_url && (
+                            <div className="mt-3">
+                                <label className="overline block mb-2">Descrizione foto (alt text, accessibilità & SEO)</label>
+                                <input data-testid="item-form-alt" placeholder={`es. ${form.name || "Piatto Tierra"} fotografato dall'alto`} value={form.image_alt} onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))} className="w-full rounded-xl bg-[#F5EFE2] px-4 py-3 outline-none focus:ring-1 focus:ring-[#7C9A4A]" />
+                            </div>
+                        )}
                     </div>
 
                     <div>
