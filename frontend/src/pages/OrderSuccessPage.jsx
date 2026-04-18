@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Clock, XCircle, ArrowRight } from "lucide-react";
 import { api } from "../lib/api";
+import { ReviewCTACard } from "../components/ReviewCTA";
 
 const OrderSuccessPage = () => {
     const [sp] = useSearchParams();
@@ -93,6 +94,12 @@ const OrderSuccessPage = () => {
                         <Link data-testid="back-to-home" to="/" className="btn-brand">Home <ArrowRight size={16} /></Link>
                     </div>
                 </div>
+
+                {status === "paid" && (
+                    <div className="mt-6">
+                        <ReviewCTACard variant="light" testId="success-review-cta" />
+                    </div>
+                )}
             </div>
         </div>
     );

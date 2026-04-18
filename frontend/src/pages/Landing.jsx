@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Leaf, Sprout, Heart, MessageCircle, MapPin, Clock } from "lucide-react";
 import { api } from "../lib/api";
 import SpecialsBanner from "../components/SpecialsBanner";
+import { ReviewCTACard } from "../components/ReviewCTA";
 
 const LOGO = "/brand/tierra-logo.png";
 const POKE = "https://images.unsplash.com/photo-1759922222212-3657d43bd5b5?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
@@ -298,6 +299,11 @@ const Landing = () => {
                     </div>
                     <img src={TAVOLO} alt="Tavolo apparecchiato con candela al Tierra" className="w-full aspect-[4/5] object-cover rounded-3xl" />
                 </div>
+            </section>
+
+            {/* Google Review CTA */}
+            <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
+                <ReviewCTACard variant="light" testId="landing-review-cta" />
             </section>
         </div>
     );
