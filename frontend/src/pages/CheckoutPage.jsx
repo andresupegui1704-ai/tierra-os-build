@@ -43,7 +43,17 @@ const CheckoutPage = () => {
         try {
             const payload = {
                 service_type: serviceType,
-                items: items.map((i) => ({ item_id: i.item_id, name: i.name, price: i.price, quantity: i.quantity })),
+                items: items.map((i) => ({
+                    item_id: i.item_id,
+                    name: i.name,
+                    price: i.price,
+                    quantity: i.quantity,
+                    customizations: (i.customizations || []).map((c) => ({
+                        group_name: c.group_name,
+                        option_names: c.option_names,
+                        price_delta: Number(c.price_delta || 0),
+                    })),
+                })),
                 customer_name: form.customer_name,
                 customer_phone: form.customer_phone,
                 customer_email: form.customer_email,
@@ -111,9 +121,20 @@ const CheckoutPage = () => {
                             {items.length === 0 ? (
                                 <p className="text-sm text-[#515E4C] italic">Nessun piatto nel carrello.</p>
                             ) : items.map((i) => (
-                                <div key={i.item_id} className="flex justify-between text-sm">
-                                    <span className="text-[#1C231A]">{i.quantity}× {i.name}</span>
-                                    <span className="text-[#515E4C]">€ {(i.price * i.quantity).toFixed(2)}</span>
+                                <div key={i.line_id} className="text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-[#1C231A]">{i.quantity}× {i.name}</span>
+                                        <span className="text-[#515E4C]">€ {((i.unit_price ?? i.price) * i.quantity).toFixed(2)}</span>
+                                    </div>
+                                    {(i.customizations || []).length > 0 && (
+                                        <ul className="mt-0.5 ml-2 space-y-0.5">
+                                            {i.customizations.map((c, idx) => (
+                                                <li key={idx} className="text-[11px] text-[#5C4E3C]">
+                                                    <span className="text-[#9B8E7A]">↳ {c.group_name}:</span> {c.option_names.join(", ")}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
                                 </div>
                             ))}
                         </div>

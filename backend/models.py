@@ -13,6 +13,25 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# ---------- Customizations ----------
+class CustomizationOption(BaseModel):
+    id: str = Field(default_factory=_uuid)
+    name: str
+    price_delta: float = 0.0
+    description: Optional[str] = None
+
+
+class CustomizationGroup(BaseModel):
+    id: str = Field(default_factory=_uuid)
+    name: str
+    description: Optional[str] = None
+    selection_type: Literal["single", "multiple"] = "single"
+    min_select: int = 0
+    max_select: int = 1
+    required: bool = False
+    options: List[CustomizationOption] = Field(default_factory=list)
+
+
 # ---------- Menu ----------
 class MenuCategory(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -55,6 +74,7 @@ class MenuItem(BaseModel):
     badge: Optional[str] = None  # e.g. "Il più scelto", "Consigliato dallo Chef"
     available: bool = True
     order: int = 0
+    customization_groups: List[CustomizationGroup] = Field(default_factory=list)
 
 
 class MenuItemUpdate(BaseModel):
@@ -67,6 +87,7 @@ class MenuItemUpdate(BaseModel):
     available: Optional[bool] = None
     order: Optional[int] = None
     category_slug: Optional[str] = None
+    customization_groups: Optional[List[CustomizationGroup]] = None
 
 
 class MenuItemCreate(BaseModel):
@@ -79,10 +100,17 @@ class MenuItemCreate(BaseModel):
     badge: Optional[str] = None
     available: bool = True
     order: int = 0
+    customization_groups: List[CustomizationGroup] = Field(default_factory=list)
 
 
 # ---------- Orders ----------
 ServiceType = Literal["delivery", "asporto", "preordine"]
+
+
+class OrderLineItemSelection(BaseModel):
+    group_name: str
+    option_names: List[str]
+    price_delta: float = 0.0
 
 
 class OrderLineItem(BaseModel):
@@ -90,6 +118,9 @@ class OrderLineItem(BaseModel):
     name: str
     price: float
     quantity: int
+    customizations: List[OrderLineItemSelection] = Field(default_factory=list)
+    unit_price: Optional[float] = None  # price + sum(customization deltas)
+    line_total: Optional[float] = None  # unit_price * quantity
 
 
 class OrderCreate(BaseModel):

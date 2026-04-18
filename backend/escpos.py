@@ -72,11 +72,24 @@ def build_order_ticket(order: dict) -> bytes:
     out += LINE
     for it in order.get("items", []):
         name = f"{it['quantity']}x {it['name']}"
-        price_line = f"EUR {(it['price'] * it['quantity']):.2f}"
-        # Print name (wrap) and total on same / next line
+        unit = it.get('unit_price') if it.get('unit_price') is not None else it['price']
+        total = (it.get('line_total') if it.get('line_total') is not None else unit * it['quantity'])
+        price_line = f"EUR {total:.2f}"
+        # Print name (wrap) and total
         out += BOLD_ON + name[:42].encode("cp858", errors="replace") + b"\n" + BOLD_OFF
         if len(name) > 42:
             out += name[42:].encode("cp858", errors="replace") + b"\n"
+        # Customizations (indented)
+        for sel in it.get("customizations") or []:
+            gname = sel.get("group_name", "")
+            opts = sel.get("option_names") or []
+            delta = sel.get("price_delta") or 0.0
+            line = f"  - {gname}: {', '.join(opts)}"
+            while line:
+                out += line[:42].encode("cp858", errors="replace") + b"\n"
+                line = "    " + line[42:] if len(line) > 42 else ""
+            if delta > 0.01:
+                out += _line("", f"+ EUR {delta:.2f}")
         out += _line("", price_line)
     out += LINE
     # Totals

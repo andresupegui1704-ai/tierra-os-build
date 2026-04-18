@@ -54,18 +54,28 @@ const CartDrawer = () => {
                             <p className="text-sm text-[#8A9486] mt-2">Esplora il menù e aggiungi i piatti che preferisci.</p>
                         </div>
                     ) : items.map((i) => (
-                        <div key={i.item_id} data-testid={`cart-item-${i.item_id}`} className="flex gap-4 items-start bg-white rounded-xl p-3 border border-[#2B4A33]/5">
+                        <div key={i.line_id} data-testid={`cart-item-${i.line_id}`} className="flex gap-4 items-start bg-white rounded-xl p-3 border border-[#2B4A33]/5">
                             {i.image_url && <img src={i.image_url} alt={i.name} className="w-16 h-16 rounded-lg object-cover" />}
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                                 <div className="flex justify-between gap-3">
                                     <h4 className="font-medium text-sm text-[#1C231A]">{i.name}</h4>
-                                    <button data-testid={`remove-${i.item_id}`} onClick={() => removeItem(i.item_id)} className="text-[#8A9486] hover:text-[#963A3A]"><Trash2 size={14} /></button>
+                                    <button data-testid={`remove-${i.line_id}`} onClick={() => removeItem(i.line_id)} className="text-[#8A9486] hover:text-[#963A3A]"><Trash2 size={14} /></button>
                                 </div>
-                                <p className="text-xs text-[#515E4C] mt-1">€ {i.price.toFixed(2)}</p>
+                                {(i.customizations || []).length > 0 && (
+                                    <ul className="mt-1 space-y-0.5">
+                                        {i.customizations.map((c, idx) => (
+                                            <li key={idx} className="text-[11px] text-[#5C4E3C] leading-tight">
+                                                <span className="text-[#9B8E7A]">{c.group_name}:</span> {c.option_names.join(", ")}
+                                                {c.price_delta > 0 && <span className="text-[#8A5B3D]"> · +€{Number(c.price_delta).toFixed(2)}</span>}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                                <p className="text-xs text-[#515E4C] mt-1">€ {Number(i.unit_price ?? i.price).toFixed(2)}</p>
                                 <div className="mt-2 flex items-center gap-3">
-                                    <button data-testid={`dec-${i.item_id}`} onClick={() => updateQty(i.item_id, i.quantity - 1)} className="w-7 h-7 rounded-full border border-[#2B4A33]/20 hover:bg-[#F1EBE1] flex items-center justify-center"><Minus size={12} /></button>
+                                    <button data-testid={`dec-${i.line_id}`} onClick={() => updateQty(i.line_id, i.quantity - 1)} className="w-7 h-7 rounded-full border border-[#2B4A33]/20 hover:bg-[#F1EBE1] flex items-center justify-center"><Minus size={12} /></button>
                                     <span className="w-6 text-center text-sm font-medium">{i.quantity}</span>
-                                    <button data-testid={`inc-${i.item_id}`} onClick={() => updateQty(i.item_id, i.quantity + 1)} className="w-7 h-7 rounded-full border border-[#2B4A33]/20 hover:bg-[#F1EBE1] flex items-center justify-center"><Plus size={12} /></button>
+                                    <button data-testid={`inc-${i.line_id}`} onClick={() => updateQty(i.line_id, i.quantity + 1)} className="w-7 h-7 rounded-full border border-[#2B4A33]/20 hover:bg-[#F1EBE1] flex items-center justify-center"><Plus size={12} /></button>
                                 </div>
                             </div>
                         </div>

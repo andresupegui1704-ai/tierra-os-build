@@ -59,10 +59,23 @@ const OrderSuccessPage = () => {
                                 <div className="mt-8 text-left bg-[#F1EBE1] rounded-xl p-5 text-sm">
                                     <p className="overline">Riepilogo</p>
                                     <p className="mt-2 font-serif text-xl text-[#1C231A]">€ {order.total.toFixed(2)} · {order.service_type}</p>
-                                    <ul className="mt-3 space-y-1 text-[#515E4C]">
-                                        {order.items.map((i, idx) => (
-                                            <li key={idx} className="flex justify-between"><span>{i.quantity}× {i.name}</span><span>€ {(i.price * i.quantity).toFixed(2)}</span></li>
-                                        ))}
+                                    <ul className="mt-3 space-y-2 text-[#515E4C]">
+                                        {order.items.map((i, idx) => {
+                                            const unit = i.unit_price ?? i.price;
+                                            const total = i.line_total ?? unit * i.quantity;
+                                            return (
+                                                <li key={idx}>
+                                                    <div className="flex justify-between"><span>{i.quantity}× {i.name}</span><span>€ {total.toFixed(2)}</span></div>
+                                                    {(i.customizations || []).length > 0 && (
+                                                        <ul className="ml-4 mt-1 text-[11px] text-[#5C4E3C] space-y-0.5">
+                                                            {i.customizations.map((c, k) => (
+                                                                <li key={k}>↳ <em>{c.group_name}:</em> {c.option_names.join(", ")}</li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                </li>
+                                            );
+                                        })}
                                     </ul>
                                 </div>
                             )}

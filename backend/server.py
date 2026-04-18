@@ -13,11 +13,12 @@ from typing import List, Optional
 
 from models import (
     MenuCategory, MenuCategoryCreate, MenuCategoryUpdate,
-    MenuItem, MenuItemCreate, MenuItemUpdate,
+    MenuItem, MenuItemCreate, MenuItemUpdate, CustomizationGroup,
     OrderCreate, Order, ReservationCreate, Reservation,
     CheckoutRequest, PaymentTransaction, AdminLogin, AdminToken,
 )
 from seed_data import CATEGORIES, ITEMS
+from customizations import bowl_groups, secondo_groups
 from email_service import send_order_confirmation, send_reservation_confirmation
 from auth import verify_admin, create_token, require_admin
 import storage as obj_storage
@@ -63,6 +64,27 @@ async def seed_on_startup():
             doc = MenuItem(**it).model_dump()
             await db.menu_items.insert_one(doc)
         logger.info(f"Seeded {len(ITEMS)} menu items.")
+    # Ensure customizations on Poke Bio & Secondo con contorno (idempotent by name match)
+    await _ensure_customizations()
+
+
+async def _ensure_customizations():
+    """Upsert customization_groups on the items that support personalization."""
+    bowl_items = await db.menu_items.find(
+        {"name": {"$in": ["Poke Media Bowl", "Poke Grande Bowl"]}}, {"_id": 0}
+    ).to_list(10)
+    for it in bowl_items:
+        if it.get("customization_groups"):
+            continue
+        groups = [CustomizationGroup(**g).model_dump() for g in bowl_groups()]
+        await db.menu_items.update_one({"id": it["id"]}, {"$set": {"customization_groups": groups}})
+        logger.info(f"Customizations applied to: {it['name']}")
+
+    secondo = await db.menu_items.find_one({"name": "Secondo con Contorno"}, {"_id": 0})
+    if secondo and not secondo.get("customization_groups"):
+        groups = [CustomizationGroup(**g).model_dump() for g in secondo_groups()]
+        await db.menu_items.update_one({"id": secondo["id"]}, {"$set": {"customization_groups": groups}})
+        logger.info("Customizations applied to: Secondo con Contorno")
 
 
 @app.on_event("shutdown")
@@ -174,9 +196,51 @@ async def create_order(payload: OrderCreate, request: Request):
             raise HTTPException(status_code=400, detail=f"Piatto esaurito: {dbi['name']}")
         if li.quantity <= 0:
             raise HTTPException(status_code=400, detail="Quantità non valida")
-        price = float(dbi["price"])
-        subtotal += price * li.quantity
-        validated_items.append({"item_id": dbi["id"], "name": dbi["name"], "price": price, "quantity": li.quantity})
+
+        # Validate & price customizations server-side
+        groups = dbi.get("customization_groups") or []
+        groups_by_name = {g["name"]: g for g in groups}
+        line_customizations = []
+        customization_delta = 0.0
+        seen_groups = set()
+        for sel in li.customizations:
+            grp = groups_by_name.get(sel.group_name)
+            if not grp:
+                raise HTTPException(status_code=400, detail=f"Personalizzazione non valida per {dbi['name']}: {sel.group_name}")
+            seen_groups.add(sel.group_name)
+            opts_by_name = {o["name"]: o for o in grp.get("options", [])}
+            chosen = sel.option_names or []
+            if grp.get("selection_type") == "single" and len(chosen) > 1:
+                raise HTTPException(status_code=400, detail=f"{sel.group_name}: scegli una sola opzione")
+            if len(chosen) < int(grp.get("min_select", 0)):
+                raise HTTPException(status_code=400, detail=f"{sel.group_name}: seleziona almeno {grp.get('min_select')} opzione(i)")
+            if len(chosen) > int(grp.get("max_select", 1)):
+                raise HTTPException(status_code=400, detail=f"{sel.group_name}: massimo {grp.get('max_select')} opzione(i)")
+            grp_delta = 0.0
+            for n in chosen:
+                opt = opts_by_name.get(n)
+                if not opt:
+                    raise HTTPException(status_code=400, detail=f"Opzione non valida: {n}")
+                grp_delta += float(opt.get("price_delta") or 0.0)
+            customization_delta += grp_delta
+            line_customizations.append({"group_name": sel.group_name, "option_names": chosen, "price_delta": round(grp_delta, 2)})
+        # Check required groups
+        for g in groups:
+            if g.get("required") and g["name"] not in seen_groups:
+                raise HTTPException(status_code=400, detail=f"{dbi['name']}: seleziona {g['name']}")
+
+        unit_price = float(dbi["price"]) + customization_delta
+        line_total = unit_price * li.quantity
+        subtotal += line_total
+        validated_items.append({
+            "item_id": dbi["id"],
+            "name": dbi["name"],
+            "price": float(dbi["price"]),
+            "quantity": li.quantity,
+            "customizations": line_customizations,
+            "unit_price": round(unit_price, 2),
+            "line_total": round(line_total, 2),
+        })
 
     if payload.service_type == "delivery" and not payload.delivery_address:
         raise HTTPException(status_code=400, detail="Indirizzo di consegna obbligatorio per il delivery")

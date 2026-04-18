@@ -65,11 +65,22 @@ async def _send(to: str, subject: str, html: str) -> bool:
 
 
 async def send_order_confirmation(order: dict) -> None:
-    items_rows = "".join(
-        f"<tr><td style='padding:8px 0;border-bottom:1px solid #F1EBE1;'>{it['quantity']}× {it['name']}</td>"
-        f"<td align='right' style='padding:8px 0;border-bottom:1px solid #F1EBE1;'>€ {it['price']*it['quantity']:.2f}</td></tr>"
-        for it in order["items"]
-    )
+    items_rows = ""
+    for it in order["items"]:
+        unit = it.get('unit_price') if it.get('unit_price') is not None else it['price']
+        total = it.get('line_total') if it.get('line_total') is not None else unit * it['quantity']
+        items_rows += (
+            f"<tr><td style='padding:8px 0;border-bottom:1px solid #F1EBE1;'>{it['quantity']}× {it['name']}</td>"
+            f"<td align='right' style='padding:8px 0;border-bottom:1px solid #F1EBE1;'>€ {total:.2f}</td></tr>"
+        )
+        for sel in it.get("customizations") or []:
+            opts = ", ".join(sel.get("option_names") or [])
+            delta = sel.get("price_delta") or 0.0
+            delta_str = f" <span style='color:#8A5B3D;'>+ € {delta:.2f}</span>" if delta > 0.01 else ""
+            items_rows += (
+                f"<tr><td colspan='2' style='padding:2px 0 8px 16px;color:#5C4E3C;font-size:13px;border-bottom:1px solid #F1EBE1;'>"
+                f"↳ <em>{sel.get('group_name','')}:</em> {opts}{delta_str}</td></tr>"
+            )
     service_label = {"delivery": "Consegna a domicilio", "asporto": "Asporto", "preordine": "Preordine sul posto"}.get(order["service_type"], order["service_type"])
     addr_block = f"<p><strong>Indirizzo di consegna:</strong> {order.get('delivery_address','')}</p>" if order["service_type"] == "delivery" else ""
     time_block = f"<p><strong>Orario:</strong> {order.get('scheduled_time','')}</p>" if order.get("scheduled_time") else ""

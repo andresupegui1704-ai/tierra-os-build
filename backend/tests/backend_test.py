@@ -160,7 +160,11 @@ class TestAdminMenuManagement:
 class TestOrders:
     def _pick_items(self, session, n=2):
         items = session.get(f"{API}/menu/items").json()
-        return [i for i in items if i.get("available", True)][:n]
+        # Prefer items without required customizations to keep tests simple
+        simple = [i for i in items if i.get("available", True) and not any(
+            g.get("required") for g in (i.get("customization_groups") or [])
+        )]
+        return simple[:n]
 
     def test_create_delivery_requires_address(self, session):
         items = self._pick_items(session)

@@ -1,10 +1,21 @@
-import React from "react";
-import { Plus, XCircle } from "lucide-react";
+import React, { useState } from "react";
+import { Plus, XCircle, Sliders } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import CustomizationDialog from "./CustomizationDialog";
 
 const MenuCard = ({ item }) => {
     const { addItem } = useCart();
     const unavailable = !item.available;
+    const hasOptions = (item.customization_groups || []).length > 0;
+    const [dialogOpen, setDialogOpen] = useState(false);
+
+    const handleAdd = () => {
+        if (hasOptions) {
+            setDialogOpen(true);
+        } else {
+            addItem(item);
+        }
+    };
 
     return (
         <article
@@ -24,6 +35,11 @@ const MenuCard = ({ item }) => {
                             {item.badge}
                         </span>
                     )}
+                    {hasOptions && !unavailable && (
+                        <span className="absolute top-3 right-3 bg-[#7C9A4A] text-[#FFFDF7] text-[10px] font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                            <Sliders size={11} strokeWidth={2} /> Personalizzabile
+                        </span>
+                    )}
                     {unavailable && (
                         <div className="absolute inset-0 bg-[#2C2418]/45 flex items-center justify-center">
                             <span className="bg-[#FFFDF7] text-[#923F28] text-xs font-semibold tracking-wider uppercase px-4 py-2 rounded-full inline-flex items-center gap-2">
@@ -33,8 +49,13 @@ const MenuCard = ({ item }) => {
                     )}
                 </div>
             ) : (
-                <div className="aspect-square bg-[#EADFC9] flex items-center justify-center">
+                <div className="aspect-square bg-[#EADFC9] flex items-center justify-center relative">
                     <span className="font-serif italic text-5xl text-[#8A5B3D]/40">Tierra</span>
+                    {hasOptions && !unavailable && (
+                        <span className="absolute top-3 right-3 bg-[#7C9A4A] text-[#FFFDF7] text-[10px] font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                            <Sliders size={11} strokeWidth={2} /> Personalizzabile
+                        </span>
+                    )}
                 </div>
             )}
 
@@ -49,13 +70,22 @@ const MenuCard = ({ item }) => {
                 <button
                     data-testid={`add-to-cart-${item.id}`}
                     disabled={unavailable}
-                    onClick={() => addItem(item)}
+                    onClick={handleAdd}
                     className="mt-5 w-full inline-flex items-center justify-center gap-2 bg-[#7C9A4A]/12 text-[#4A6127] hover:bg-[#7C9A4A] hover:text-[#FFFDF7] disabled:opacity-40 disabled:cursor-not-allowed rounded-full py-2.5 text-sm font-medium transition-colors"
                 >
                     <Plus size={16} strokeWidth={2} />
-                    {unavailable ? "Non disponibile" : "Aggiungi all'ordine"}
+                    {unavailable ? "Non disponibile" : hasOptions ? "Scegli e aggiungi" : "Aggiungi all'ordine"}
                 </button>
             </div>
+
+            {hasOptions && (
+                <CustomizationDialog
+                    open={dialogOpen}
+                    onOpenChange={setDialogOpen}
+                    item={item}
+                    onConfirm={({ selections, unitPrice }) => addItem(item, { customizations: selections, unitPrice })}
+                />
+            )}
         </article>
     );
 };
