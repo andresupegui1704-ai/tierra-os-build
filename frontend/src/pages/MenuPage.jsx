@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import MenuCard from "../components/MenuCard";
+import SpecialsBanner from "../components/SpecialsBanner";
 
 const MenuPage = () => {
     const [categories, setCategories] = useState([]);
@@ -31,6 +32,11 @@ const MenuPage = () => {
                     Sfoglia le categorie, aggiungi al carrello e scegli se ritirare, farti consegnare, o trovarlo pronto al tavolo.
                 </p>
             </section>
+
+            {/* Specials banner if any */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <SpecialsBanner />
+            </div>
 
             {/* Category tabs */}
             <div className="sticky top-20 z-30 bg-[#F5EFE2]/90 backdrop-blur-md border-y border-[#8A5B3D]/15">

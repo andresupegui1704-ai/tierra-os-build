@@ -6,7 +6,7 @@ al prossimo startup (eventuali edit admin degli item affetti andranno persi).
 """
 from typing import List, Dict
 
-CUSTOMIZATION_VERSION = 3  # v3: Secondo proteine 2 incluse (€0), extra a prezzo pieno
+CUSTOMIZATION_VERSION = 4  # v4: opzioni con campo `available`
 
 # Basi di carboidrati — incluse nel prezzo della bowl
 CARBS: List[Dict] = [

@@ -19,6 +19,7 @@ class CustomizationOption(BaseModel):
     name: str
     price_delta: float = 0.0
     description: Optional[str] = None
+    available: bool = True
 
 
 class CustomizationGroup(BaseModel):
@@ -75,6 +76,7 @@ class MenuItem(BaseModel):
     available: bool = True
     order: int = 0
     customization_groups: List[CustomizationGroup] = Field(default_factory=list)
+    is_special: bool = False
 
 
 class MenuItemUpdate(BaseModel):

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight, Leaf, Sprout, Heart, MessageCircle, MapPin, Clock } from "lucide-react";
 import { api } from "../lib/api";
+import SpecialsBanner from "../components/SpecialsBanner";
 
 const LOGO = "/brand/tierra-logo.png";
 const POKE = "https://images.unsplash.com/photo-1759922222212-3657d43bd5b5?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
@@ -121,7 +122,7 @@ const Landing = () => {
             </section>
 
             {/* STORIA */}
-            <section id="storia" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+            <section id="storia" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-6">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
                     <div className="md:col-span-5">
                         <p className="overline">La nostra storia</p>
@@ -142,6 +143,11 @@ const Landing = () => {
                     </div>
                 </div>
             </section>
+
+            {/* SPECIALS (appears only if admin has marked any) */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <SpecialsBanner />
+            </div>
 
             {/* PILLARS */}
             <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">

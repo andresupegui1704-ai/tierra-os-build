@@ -108,11 +108,23 @@ async def restaurant_info():
     }
 
 
+MAX_SPECIALS = 4
+
+
 # ---------- Public Menu ----------
 @api.get("/menu/categories", response_model=List[MenuCategory])
 async def list_categories():
     cats = await db.categories.find({"active": True}, {"_id": 0}).sort("order", 1).to_list(100)
     return cats
+
+
+@api.get("/menu/specials", response_model=List[MenuItem])
+async def list_specials():
+    """Top 4 specials (attivi) per banner dedicato."""
+    items = await db.menu_items.find(
+        {"is_special": True, "available": True}, {"_id": 0}
+    ).sort("order", 1).to_list(MAX_SPECIALS)
+    return [_sanitize_menu_item(i) for i in items]
 
 
 @api.get("/menu/items", response_model=List[MenuItem])
@@ -123,7 +135,18 @@ async def list_items(category: Optional[str] = None, only_available: bool = Fals
     if only_available:
         q["available"] = True
     items = await db.menu_items.find(q, {"_id": 0}).sort("order", 1).to_list(500)
-    return items
+    return [_sanitize_menu_item(i) for i in items]
+
+
+def _sanitize_menu_item(item: dict) -> dict:
+    """Filtra dalle customization options quelle disattivate (vista pubblica)."""
+    groups = item.get("customization_groups") or []
+    filtered_groups = []
+    for g in groups:
+        opts = [o for o in g.get("options", []) if o.get("available", True)]
+        filtered_groups.append({**g, "options": opts})
+    item["customization_groups"] = filtered_groups
+    return item
 
 
 # ---------- Admin Auth ----------
@@ -169,6 +192,52 @@ async def admin_toggle_item(item_id: str, _: str = Depends(require_admin)):
     await db.menu_items.update_one({"id": item_id}, {"$set": {"available": new_val}})
     item["available"] = new_val
     return item
+
+
+@api.post("/admin/menu/items/{item_id}/special")
+async def admin_toggle_special(item_id: str, _: str = Depends(require_admin)):
+    """Imposta/rimuove lo stato Special del Giorno. Max 4 attivi contemporaneamente."""
+    item = await db.menu_items.find_one({"id": item_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Piatto non trovato")
+    new_val = not bool(item.get("is_special"))
+    if new_val:
+        current = await db.menu_items.count_documents({"is_special": True, "id": {"$ne": item_id}})
+        if current >= MAX_SPECIALS:
+            raise HTTPException(status_code=400, detail=f"Massimo {MAX_SPECIALS} Special del Giorno. Rimuovine uno prima.")
+    await db.menu_items.update_one({"id": item_id}, {"$set": {"is_special": new_val}})
+    return {"id": item_id, "is_special": new_val}
+
+
+@api.post("/admin/menu/items/{item_id}/option-toggle")
+async def admin_toggle_option(item_id: str, group_name: str, option_name: str, _: str = Depends(require_admin)):
+    """Accende/spegne una singola opzione di personalizzazione (es. proteina)."""
+    item = await db.menu_items.find_one({"id": item_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Piatto non trovato")
+    groups = item.get("customization_groups") or []
+    found_group = None
+    found_opt = None
+    for g in groups:
+        if g["name"] == group_name:
+            found_group = g
+            for o in g.get("options", []):
+                if o["name"] == option_name:
+                    found_opt = o
+                    break
+            break
+    if not found_group or not found_opt:
+        raise HTTPException(status_code=404, detail="Gruppo o opzione non trovata")
+    found_opt["available"] = not bool(found_opt.get("available", True))
+    await db.menu_items.update_one({"id": item_id}, {"$set": {"customization_groups": groups}})
+    return {"item_id": item_id, "group_name": group_name, "option_name": option_name, "available": found_opt["available"]}
+
+
+@api.get("/admin/menu/items", response_model=List[MenuItem])
+async def admin_list_items(_: str = Depends(require_admin)):
+    """Lista completa SENZA filtro pubblico: l'admin vede pure opzioni disattivate."""
+    items = await db.menu_items.find({}, {"_id": 0}).sort("order", 1).to_list(500)
+    return items
 
 
 @api.delete("/admin/menu/items/{item_id}")
@@ -221,6 +290,8 @@ async def create_order(payload: OrderCreate, request: Request):
                 opt = opts_by_name.get(n)
                 if not opt:
                     raise HTTPException(status_code=400, detail=f"Opzione non valida: {n}")
+                if not opt.get("available", True):
+                    raise HTTPException(status_code=400, detail=f"Opzione non disponibile: {n}")
                 grp_delta += float(opt.get("price_delta") or 0.0)
             customization_delta += grp_delta
             line_customizations.append({"group_name": sel.group_name, "option_names": chosen, "price_delta": round(grp_delta, 2)})

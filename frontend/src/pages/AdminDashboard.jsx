@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { UtensilsCrossed, ShoppingBag, CalendarDays, LogOut, Edit2, Check, X, Plus, Trash2, Printer, Download, RefreshCw } from "lucide-react";
+import { UtensilsCrossed, ShoppingBag, CalendarDays, LogOut, Edit2, Check, X, Plus, Trash2, Printer, Download, RefreshCw, Sparkles } from "lucide-react";
 import { Switch } from "../components/ui/switch";
 import { api } from "../lib/api";
 import MenuItemDialog from "../components/MenuItemDialog";
+import CustomizationOptionsPanel from "../components/CustomizationOptionsPanel";
 
 const Sidebar = ({ active, onNav, onLogout }) => (
     <aside className="fixed left-0 top-0 bottom-0 w-64 bg-[#2C2418] text-[#F5EFE2] p-6 hidden lg:flex flex-col">
@@ -44,7 +45,7 @@ const AdminDashboard = () => {
     const nav = useNavigate();
 
     const loadMenu = async () => {
-        const [c, i] = await Promise.all([api.get("/menu/categories"), api.get("/menu/items")]);
+        const [c, i] = await Promise.all([api.get("/menu/categories"), api.get("/admin/menu/items")]);
         setCategories(c.data); setItems(i.data);
     };
 
@@ -101,6 +102,20 @@ const AdminDashboard = () => {
         } catch { toast.error("Errore"); }
     };
 
+    const toggleSpecial = async (item) => {
+        try {
+            const { data } = await api.post(`/admin/menu/items/${item.id}/special`);
+            setItems((prev) => prev.map((it) => it.id === item.id ? { ...it, is_special: data.is_special } : it));
+            toast.success(data.is_special ? `${item.name}: Special del Giorno` : `${item.name}: rimosso dagli Special`);
+        } catch (e) { toast.error(e?.response?.data?.detail || "Errore"); }
+    };
+
+    const applyItemUpdate = (updated) => {
+        setItems((prev) => prev.map((it) => it.id === updated.id ? updated : it));
+    };
+
+    const specialsCount = items.filter((i) => i.is_special).length;
+
     const reprintOrder = async (orderId) => {
         try {
             await api.post(`/admin/print/reprint/${orderId}`);
@@ -147,33 +162,28 @@ const AdminDashboard = () => {
                             })}
                         </div>
 
-                        <div className="mt-6 bg-white rounded-2xl border border-[#8A5B3D]/10 overflow-hidden">
-                            <table className="w-full text-sm">
-                                <thead className="bg-[#F5EFE2] text-[#5C4E3C]">
-                                    <tr>
-                                        <th className="text-left px-5 py-3 font-medium">Piatto</th>
-                                        <th className="text-left px-5 py-3 font-medium hidden md:table-cell">Categoria</th>
-                                        <th className="text-right px-5 py-3 font-medium">Prezzo €</th>
-                                        <th className="text-center px-5 py-3 font-medium">Disponibile</th>
-                                        <th className="text-right px-5 py-3 font-medium">Azioni</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredItems.length === 0 && (
-                                        <tr><td colSpan="5" className="text-center py-12 text-[#9B8E7A]">Nessun piatto in questa categoria.</td></tr>
-                                    )}
-                                    {filteredItems.map((it) => (
-                                        <MenuRow
-                                            key={it.id}
-                                            item={it}
-                                            onToggle={toggleItem}
-                                            onUpdatePrice={updatePrice}
-                                            onEdit={() => { setEditingItem(it); setDialogOpen(true); }}
-                                            onDelete={() => deleteItem(it.id, it.name)}
-                                        />
-                                    ))}
-                                </tbody>
-                            </table>
+                        <div className="mt-4 flex items-center gap-3 text-xs text-[#5C4E3C]">
+                            <span className="overline flex items-center gap-1"><Sparkles size={13} className="text-[#C89B3C]" /> Special del Giorno</span>
+                            <span>{specialsCount}/4 attivi</span>
+                        </div>
+
+                        <div className="mt-6 space-y-3">
+                            {filteredItems.length === 0 && (
+                                <div className="text-center py-12 text-[#9B8E7A] bg-white rounded-2xl border border-[#8A5B3D]/10">Nessun piatto in questa categoria.</div>
+                            )}
+                            {filteredItems.map((it) => (
+                                <MenuRowCard
+                                    key={it.id}
+                                    item={it}
+                                    specialsCount={specialsCount}
+                                    onToggle={toggleItem}
+                                    onToggleSpecial={toggleSpecial}
+                                    onUpdatePrice={updatePrice}
+                                    onEdit={() => { setEditingItem(it); setDialogOpen(true); }}
+                                    onDelete={() => deleteItem(it.id, it.name)}
+                                    onItemUpdated={applyItemUpdate}
+                                />
+                            ))}
                         </div>
 
                         <MenuItemDialog
@@ -246,45 +256,69 @@ const AdminDashboard = () => {
     );
 };
 
-const MenuRow = ({ item, onToggle, onUpdatePrice, onEdit, onDelete }) => {
+const MenuRowCard = ({ item, specialsCount, onToggle, onToggleSpecial, onUpdatePrice, onEdit, onDelete, onItemUpdated }) => {
     const [editing, setEditing] = useState(false);
     const [price, setPrice] = useState(item.price.toFixed(2));
+    const specialDisabled = !item.is_special && specialsCount >= 4;
+
     return (
-        <tr data-testid={`menu-row-${item.id}`} className="border-t border-[#8A5B3D]/10">
-            <td className="px-5 py-4">
-                <div className="flex items-center gap-3">
-                    {item.image_url ? <img src={item.image_url} alt="" className="w-12 h-12 rounded-lg object-cover" /> : <div className="w-12 h-12 rounded-lg bg-[#EADFC9] flex items-center justify-center text-[#8A5B3D] text-xs font-serif italic">Tierra</div>}
-                    <div>
-                        <p className="font-medium text-[#2C2418]">{item.name}</p>
-                        {item.badge && <p className="text-xs text-[#8A5B3D]">{item.badge}</p>}
-                    </div>
-                </div>
-            </td>
-            <td className="px-5 py-4 text-[#5C4E3C] capitalize hidden md:table-cell">{item.category_slug.replace(/-/g, " / ")}</td>
-            <td className="px-5 py-4 text-right">
-                {editing ? (
-                    <div className="flex items-center justify-end gap-2">
-                        <input data-testid={`price-input-${item.id}`} value={price} onChange={(e) => setPrice(e.target.value)} className="w-20 px-2 py-1 text-right border border-[#8A5B3D]/25 rounded" />
-                        <button data-testid={`save-price-${item.id}`} onClick={async () => { await onUpdatePrice(item.id, price); setEditing(false); }} className="text-[#5E7F32]"><Check size={16} /></button>
-                        <button onClick={() => { setEditing(false); setPrice(item.price.toFixed(2)); }} className="text-[#923F28]"><X size={16} /></button>
-                    </div>
+        <div data-testid={`menu-row-${item.id}`} className={`bg-white rounded-2xl border transition-colors overflow-hidden ${item.is_special ? "border-[#C89B3C]/40 ring-1 ring-[#C89B3C]/20" : "border-[#8A5B3D]/10"}`}>
+            <div className="flex items-center gap-4 p-4">
+                {item.image_url ? (
+                    <img src={item.image_url} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0" />
                 ) : (
-                    <div className="flex items-center justify-end gap-2">
-                        <span>{item.price.toFixed(2)}</span>
-                        <button data-testid={`edit-price-${item.id}`} onClick={() => setEditing(true)} className="text-[#9B8E7A] hover:text-[#8A5B3D]"><Edit2 size={14} /></button>
-                    </div>
+                    <div className="w-16 h-16 rounded-xl bg-[#EADFC9] flex items-center justify-center text-[#8A5B3D] text-xs font-serif italic shrink-0">Tierra</div>
                 )}
-            </td>
-            <td className="px-5 py-4 text-center">
-                <Switch data-testid={`toggle-${item.id}`} checked={item.available} onCheckedChange={() => onToggle(item.id)} />
-            </td>
-            <td className="px-5 py-4 text-right">
-                <div className="inline-flex gap-2">
-                    <button data-testid={`edit-${item.id}`} onClick={onEdit} className="p-2 hover:bg-[#F5EFE2] rounded" title="Modifica"><Edit2 size={14} /></button>
-                    <button data-testid={`delete-${item.id}`} onClick={onDelete} className="p-2 hover:bg-[#F5EFE2] rounded text-[#923F28]" title="Elimina"><Trash2 size={14} /></button>
+
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-[#2C2418] truncate">{item.name}</p>
+                        {item.is_special && (
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-[#C89B3C]/15 text-[#8A6A14] px-2 py-0.5 rounded-full font-semibold tracking-wider uppercase">
+                                <Sparkles size={10} /> Special
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-xs text-[#5C4E3C] capitalize mt-0.5">{item.category_slug.replace(/-/g, " / ")}</p>
                 </div>
-            </td>
-        </tr>
+
+                <div className="hidden md:block text-right">
+                    {editing ? (
+                        <div className="flex items-center justify-end gap-1">
+                            <input data-testid={`price-input-${item.id}`} value={price} onChange={(e) => setPrice(e.target.value)} className="w-20 px-2 py-1 text-right border border-[#8A5B3D]/25 rounded text-sm" />
+                            <button data-testid={`save-price-${item.id}`} onClick={async () => { await onUpdatePrice(item.id, price); setEditing(false); }} className="text-[#5E7F32] p-1"><Check size={14} /></button>
+                            <button onClick={() => { setEditing(false); setPrice(item.price.toFixed(2)); }} className="text-[#923F28] p-1"><X size={14} /></button>
+                        </div>
+                    ) : (
+                        <button data-testid={`edit-price-${item.id}`} onClick={() => setEditing(true)} className="text-sm text-[#2C2418] hover:text-[#8A5B3D] inline-flex items-center gap-1">
+                            € {item.price.toFixed(2)} <Edit2 size={12} className="text-[#9B8E7A]" />
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="flex flex-col items-center gap-0.5" title={item.is_special ? "Rimuovi dagli Special" : specialDisabled ? "Massimo 4 Special attivi" : "Imposta come Special del Giorno"}>
+                        <Switch
+                            data-testid={`special-${item.id}`}
+                            checked={!!item.is_special}
+                            disabled={specialDisabled}
+                            onCheckedChange={() => !specialDisabled && onToggleSpecial(item)}
+                            className="data-[state=checked]:bg-[#C89B3C]"
+                        />
+                        <span className="text-[9px] uppercase tracking-widest text-[#9B8E7A]">Special</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5" title="Disponibile a menu">
+                        <Switch data-testid={`toggle-${item.id}`} checked={item.available} onCheckedChange={() => onToggle(item.id)} />
+                        <span className="text-[9px] uppercase tracking-widest text-[#9B8E7A]">Attivo</span>
+                    </div>
+                    <div className="flex gap-1">
+                        <button data-testid={`edit-${item.id}`} onClick={onEdit} className="p-2 hover:bg-[#F5EFE2] rounded" title="Modifica"><Edit2 size={14} /></button>
+                        <button data-testid={`delete-${item.id}`} onClick={onDelete} className="p-2 hover:bg-[#F5EFE2] rounded text-[#923F28]" title="Elimina"><Trash2 size={14} /></button>
+                    </div>
+                </div>
+            </div>
+            <CustomizationOptionsPanel item={item} onUpdated={onItemUpdated} />
+        </div>
     );
 };
 
