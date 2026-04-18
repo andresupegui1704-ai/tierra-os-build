@@ -1,89 +1,358 @@
-from fastapi import FastAPI, APIRouter
+"""Tierra Organic Bistro — FastAPI backend."""
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, BackgroundTasks
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pathlib import Path
 import os
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
+from typing import List, Optional
 
+from models import (
+    MenuCategory, MenuItem, MenuItemCreate, MenuItemUpdate,
+    OrderCreate, Order, ReservationCreate, Reservation,
+    CheckoutRequest, PaymentTransaction, AdminLogin, AdminToken,
+)
+from seed_data import CATEGORIES, ITEMS
+from email_service import send_order_confirmation, send_reservation_confirmation
+from auth import verify_admin, create_token, require_admin
+
+from emergentintegrations.payments.stripe.checkout import (
+    StripeCheckout, CheckoutSessionRequest,
+)
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ["DB_NAME"]]
 
-# Create the main app without a prefix
-app = FastAPI()
+STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
+app = FastAPI(title="Tierra Organic Bistro API")
+api = APIRouter(prefix="/api")
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+# ---------- Bootstrap / Seed ----------
+@app.on_event("startup")
+async def seed_on_startup():
+    # Seed categories
+    for cat in CATEGORIES:
+        existing = await db.categories.find_one({"slug": cat["slug"]}, {"_id": 0})
+        if not existing:
+            doc = MenuCategory(**cat).model_dump()
+            await db.categories.insert_one(doc)
+    # Seed items only if collection is empty (idempotent first-seed)
+    count = await db.menu_items.count_documents({})
+    if count == 0:
+        for it in ITEMS:
+            doc = MenuItem(**it).model_dump()
+            await db.menu_items.insert_one(doc)
+        logger.info(f"Seeded {len(ITEMS)} menu items.")
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
+@app.on_event("shutdown")
+async def shutdown():
+    client.close()
+
+
+# ---------- Health ----------
+@api.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"status": "ok", "service": "Tierra Organic Bistro API"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+@api.get("/info")
+async def restaurant_info():
+    return {
+        "name": os.environ.get("RESTAURANT_NAME", "Tierra Organic Bistro"),
+        "address": os.environ.get("RESTAURANT_ADDRESS", ""),
+        "whatsapp": os.environ.get("RESTAURANT_WHATSAPP", ""),
+        "email": os.environ.get("RESTAURANT_EMAIL", ""),
+    }
 
-# Include the router in the main app
-app.include_router(api_router)
 
+# ---------- Public Menu ----------
+@api.get("/menu/categories", response_model=List[MenuCategory])
+async def list_categories():
+    cats = await db.categories.find({"active": True}, {"_id": 0}).sort("order", 1).to_list(100)
+    return cats
+
+
+@api.get("/menu/items", response_model=List[MenuItem])
+async def list_items(category: Optional[str] = None, only_available: bool = False):
+    q: dict = {}
+    if category:
+        q["category_slug"] = category
+    if only_available:
+        q["available"] = True
+    items = await db.menu_items.find(q, {"_id": 0}).sort("order", 1).to_list(500)
+    return items
+
+
+# ---------- Admin Auth ----------
+@api.post("/admin/login", response_model=AdminToken)
+async def admin_login(payload: AdminLogin):
+    if not verify_admin(payload.email, payload.password):
+        raise HTTPException(status_code=401, detail="Credenziali non valide")
+    return AdminToken(access_token=create_token(payload.email))
+
+
+@api.get("/admin/me")
+async def admin_me(email: str = Depends(require_admin)):
+    return {"email": email, "role": "admin"}
+
+
+# ---------- Admin: Menu Management ----------
+@api.post("/admin/menu/items", response_model=MenuItem)
+async def admin_create_item(payload: MenuItemCreate, _: str = Depends(require_admin)):
+    item = MenuItem(**payload.model_dump())
+    await db.menu_items.insert_one(item.model_dump())
+    return item
+
+
+@api.patch("/admin/menu/items/{item_id}", response_model=MenuItem)
+async def admin_update_item(item_id: str, payload: MenuItemUpdate, _: str = Depends(require_admin)):
+    update = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not update:
+        raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+    result = await db.menu_items.find_one_and_update(
+        {"id": item_id}, {"$set": update}, return_document=True, projection={"_id": 0}
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Piatto non trovato")
+    return result
+
+
+@api.post("/admin/menu/items/{item_id}/toggle", response_model=MenuItem)
+async def admin_toggle_item(item_id: str, _: str = Depends(require_admin)):
+    item = await db.menu_items.find_one({"id": item_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Piatto non trovato")
+    new_val = not item.get("available", True)
+    await db.menu_items.update_one({"id": item_id}, {"$set": {"available": new_val}})
+    item["available"] = new_val
+    return item
+
+
+@api.delete("/admin/menu/items/{item_id}")
+async def admin_delete_item(item_id: str, _: str = Depends(require_admin)):
+    res = await db.menu_items.delete_one({"id": item_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Piatto non trovato")
+    return {"deleted": True}
+
+
+# ---------- Orders ----------
+@api.post("/orders", response_model=Order)
+async def create_order(payload: OrderCreate, request: Request):
+    # Validate items against DB and recompute total on server
+    item_ids = [i.item_id for i in payload.items]
+    db_items = await db.menu_items.find({"id": {"$in": item_ids}}, {"_id": 0}).to_list(500)
+    db_map = {i["id"]: i for i in db_items}
+    subtotal = 0.0
+    validated_items = []
+    for li in payload.items:
+        dbi = db_map.get(li.item_id)
+        if not dbi:
+            raise HTTPException(status_code=400, detail=f"Piatto non disponibile: {li.name}")
+        if not dbi.get("available", True):
+            raise HTTPException(status_code=400, detail=f"Piatto esaurito: {dbi['name']}")
+        if li.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantità non valida")
+        price = float(dbi["price"])
+        subtotal += price * li.quantity
+        validated_items.append({"item_id": dbi["id"], "name": dbi["name"], "price": price, "quantity": li.quantity})
+
+    if payload.service_type == "delivery" and not payload.delivery_address:
+        raise HTTPException(status_code=400, detail="Indirizzo di consegna obbligatorio per il delivery")
+
+    # Delivery fee (simple, server-side)
+    delivery_fee = 3.50 if payload.service_type == "delivery" else 0.0
+    total = round(subtotal + delivery_fee, 2)
+
+    order = Order(
+        service_type=payload.service_type,
+        items=validated_items,
+        customer_name=payload.customer_name,
+        customer_phone=payload.customer_phone,
+        customer_email=payload.customer_email,
+        delivery_address=payload.delivery_address,
+        scheduled_time=payload.scheduled_time,
+        notes=payload.notes,
+        subtotal=round(subtotal, 2),
+        total=total,
+    )
+    await db.orders.insert_one(order.model_dump())
+    return order
+
+
+@api.get("/orders/{order_id}", response_model=Order)
+async def get_order(order_id: str):
+    o = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not o:
+        raise HTTPException(status_code=404, detail="Ordine non trovato")
+    return o
+
+
+@api.get("/admin/orders", response_model=List[Order])
+async def admin_list_orders(_: str = Depends(require_admin)):
+    orders = await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return orders
+
+
+@api.post("/admin/orders/{order_id}/status")
+async def admin_set_order_status(order_id: str, status: str, _: str = Depends(require_admin)):
+    allowed = {"pending_payment", "paid", "preparing", "ready", "completed", "cancelled"}
+    if status not in allowed:
+        raise HTTPException(status_code=400, detail="Stato non valido")
+    res = await db.orders.update_one({"id": order_id}, {"$set": {"status": status}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Ordine non trovato")
+    return {"ok": True}
+
+
+# ---------- Payments (Stripe) ----------
+@api.post("/payments/checkout")
+async def create_checkout(req: CheckoutRequest, http_request: Request):
+    order = await db.orders.find_one({"id": req.order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Ordine non trovato")
+    if order.get("payment_status") == "paid":
+        raise HTTPException(status_code=400, detail="Ordine già pagato")
+
+    amount = float(order["total"])
+    host_url = str(http_request.base_url)
+    webhook_url = f"{host_url}api/webhook/stripe"
+    stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+
+    origin = req.origin_url.rstrip("/")
+    success_url = f"{origin}/ordine/successo?session_id={{CHECKOUT_SESSION_ID}}&order_id={order['id']}"
+    cancel_url = f"{origin}/checkout?order_id={order['id']}&cancelled=1"
+
+    session = await stripe.create_checkout_session(CheckoutSessionRequest(
+        amount=amount,
+        currency="eur",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={"order_id": order["id"], "source": "tierra_order"},
+    ))
+
+    tx = PaymentTransaction(
+        order_id=order["id"],
+        session_id=session.session_id,
+        amount=amount,
+        currency="eur",
+        metadata={"order_id": order["id"]},
+    )
+    await db.payment_transactions.insert_one(tx.model_dump())
+    await db.orders.update_one({"id": order["id"]}, {"$set": {"stripe_session_id": session.session_id}})
+    return {"url": session.url, "session_id": session.session_id}
+
+
+@api.get("/payments/status/{session_id}")
+async def payment_status(session_id: str, background: BackgroundTasks, http_request: Request):
+    tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+    if not tx:
+        raise HTTPException(status_code=404, detail="Sessione non trovata")
+
+    host_url = str(http_request.base_url)
+    webhook_url = f"{host_url}api/webhook/stripe"
+    stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    status = await stripe.get_checkout_status(session_id)
+
+    # Update transaction
+    await db.payment_transactions.update_one(
+        {"session_id": session_id},
+        {"$set": {"payment_status": status.payment_status, "status": status.status}},
+    )
+
+    # Update order + send confirmation (once)
+    if status.payment_status == "paid" and tx.get("payment_status") != "paid":
+        order = await db.orders.find_one_and_update(
+            {"id": tx["order_id"]},
+            {"$set": {"payment_status": "paid", "status": "paid"}},
+            return_document=True,
+            projection={"_id": 0},
+        )
+        if order:
+            background.add_task(send_order_confirmation, order)
+
+    return {
+        "status": status.status,
+        "payment_status": status.payment_status,
+        "amount_total": status.amount_total,
+        "currency": status.currency,
+    }
+
+
+@api.post("/webhook/stripe")
+async def stripe_webhook(request: Request):
+    body = await request.body()
+    signature = request.headers.get("Stripe-Signature", "")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url}api/webhook/stripe"
+    stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    try:
+        resp = await stripe.handle_webhook(body, signature)
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid webhook")
+    if resp.payment_status == "paid" and resp.session_id:
+        await db.payment_transactions.update_one(
+            {"session_id": resp.session_id}, {"$set": {"payment_status": "paid", "status": "complete"}}
+        )
+        tx = await db.payment_transactions.find_one({"session_id": resp.session_id}, {"_id": 0})
+        if tx:
+            order = await db.orders.find_one_and_update(
+                {"id": tx["order_id"], "payment_status": {"$ne": "paid"}},
+                {"$set": {"payment_status": "paid", "status": "paid"}},
+                return_document=True,
+                projection={"_id": 0},
+            )
+            if order:
+                await send_order_confirmation(order)
+    return {"received": True}
+
+
+# ---------- Reservations ----------
+@api.post("/reservations", response_model=Reservation)
+async def create_reservation(payload: ReservationCreate, background: BackgroundTasks):
+    if payload.guests < 1 or payload.guests > 20:
+        raise HTTPException(status_code=400, detail="Numero ospiti non valido (1-20)")
+    res = Reservation(**payload.model_dump())
+    await db.reservations.insert_one(res.model_dump())
+    background.add_task(send_reservation_confirmation, res.model_dump())
+    return res
+
+
+@api.get("/admin/reservations", response_model=List[Reservation])
+async def admin_list_reservations(_: str = Depends(require_admin)):
+    rows = await db.reservations.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return rows
+
+
+@api.post("/admin/reservations/{res_id}/status")
+async def admin_set_res_status(res_id: str, status: str, _: str = Depends(require_admin)):
+    allowed = {"pending", "confirmed", "cancelled"}
+    if status not in allowed:
+        raise HTTPException(status_code=400, detail="Stato non valido")
+    r = await db.reservations.update_one({"id": res_id}, {"$set": {"status": status}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Prenotazione non trovata")
+    return {"ok": True}
+
+
+# Include + CORS
+app.include_router(api)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()

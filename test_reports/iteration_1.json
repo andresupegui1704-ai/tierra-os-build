@@ -1,0 +1,46 @@
+{
+  "summary": "First iteration end-to-end test of Tierra Organic Bistro. Backend 26/27 pytest tests passing (96%). Frontend critical flows verified via Playwright — landing, menu category filtering, cart add/qty/service-type delivery fee, checkout page, reservations page, admin login + dashboard (menu toggles visible, orders/reservations tabs present). One backend bug found in Stripe payment status polling that will break the OrderSuccessPage polling UX.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/payments/status/{session_id}",
+        "issue": "Returns 500 Internal Server Error on a freshly created checkout session. Root cause is inside emergentintegrations library (stripe/checkout.py:204): Pydantic validation error — `CheckoutStatusResponse.metadata` expects dict but Stripe returns a StripeObject. Stack: `CheckoutError: Unexpected error retrieving session status: 1 validation error for CheckoutStatusResponse metadata Input should be a valid dictionary [type=dict_type, input_value=<StripeObject at ...>]`. This breaks the /ordine/successo polling flow after Stripe redirect — customers will see an error instead of payment confirmation. POST /api/payments/checkout itself works fine (session URL + session_id returned, payment_transactions and order.stripe_session_id persisted).",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix GET /api/payments/status/{session_id} 500 error — the emergentintegrations CheckoutStatusResponse cannot parse Stripe's StripeObject as metadata dict. Options: (a) wrap `stripe.get_checkout_status(session_id)` in try/except and gracefully handle the CheckoutError by returning the minimum fields the frontend needs (OrderSuccessPage polls for payment_status), falling back to reading Stripe directly via stripe SDK to coerce metadata -> dict; (b) web_search 'emergentintegrations stripe checkout metadata StripeObject validation error' to find the recommended workaround from Emergent. This is the ONLY blocker for the complete payment UX.",
+    "(Optional) Consider idempotency on POST /api/orders (e.g., client request id) to avoid duplicate orders on retry."
+  ],
+  "critical_code_review_comments": [
+    "seed_on_startup (server.py:42) seeds categories idempotently but seeds items only when the collection is empty — good. Consider upsert-by-slug for categories to allow updates to image/description without DB wipe.",
+    "auth.py `verify_admin` compares plaintext admin password from env. Acceptable for single admin + MVP but note for future (bcrypt hash in env or user table).",
+    "Stripe amount is taken from DB (order.total) — good server-side enforcement. But /api/payments/checkout should also 404-guard order.status ∈ {cancelled}. Currently only blocks when `payment_status=='paid'`.",
+    "/api/admin/orders/{id}/status and /api/admin/reservations/{id}/status take status as a query string param (not body) — a bit unusual for POST but functional. Consider using a body model for consistency.",
+    "No rate limiting on /api/reservations and /api/orders — could be abused by bots. MVP acceptable but note it.",
+    "Frontend: all interactive elements DO have data-testid attributes (verified: hero-cta-menu/reserve/whatsapp, cat-tab-{slug}, menu-card-*, add-to-cart-*, service-*, cart-total, cart-checkout-btn, checkout-service-*, submit-checkout-btn, res-date/time/guests-trigger, submit-reservation-btn, admin-*, toggle-*, menu-row-*, price-input-*, etc.). Good coverage.",
+    "Test-id naming is inconsistent between review_request expectations and actual code (e.g., review expected `category-tab-*` but code uses `cat-tab-*`; expected `admin-tab-*` but code uses `sidebar-*`; expected `whatsapp-floating-button` but code uses `whatsapp-fab`; expected `reservation-name` but code uses simply `name`). Testids work but main agent may want to standardise for third-party testing predictability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (new)",
+    "/app/test_reports/pytest/pytest_results.xml (new)"
+  ],
+  "success_rate": {"backend": "96% (26/27)", "frontend": "100% of critical flows verified"},
+  "test_credentials": "admin@tierraorganic.it / Tierra2026! — working",
+  "seed_data_creation": "None beyond TEST_* orders/reservations created by pytest cases (reservations persist but do not break UX). Consider periodic cleanup.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest suite is at /app/backend/tests/backend_test.py and produces JUnit XML at /app/test_reports/pytest/pytest_results.xml. It exercises every endpoint required by the review request. Re-run with: `python -m pytest /app/backend/tests/backend_test.py -v --tb=short --junitxml=/app/test_reports/pytest/pytest_results.xml`. After the payment-status fix, re-run TestPayments::test_payment_status_fresh_session specifically. For the frontend, all real testids are discovered — note `cat-tab-{slug}`, `whatsapp-fab`, `sidebar-menu|orders|reservations`, `toggle-{item_id}`, `menu-row-{item_id}`, `res-date-trigger`, and the reservation form inputs use plain testids `name|phone|email`.",
+  "rca of the issue": "GET /api/payments/status/{session_id} 500 root cause: the `emergentintegrations.payments.stripe.checkout` client retrieves a Stripe Session whose `metadata` attribute is a live `StripeObject` (Stripe's dict subclass). Its internal Pydantic model `CheckoutStatusResponse` declares `metadata: dict` with strict type coercion (Pydantic v2 default), so validation fails with `Input should be a valid dictionary [type=dict_type]`. Reproduction: POST /api/orders -> POST /api/payments/checkout (works, returns session_id) -> GET /api/payments/status/<that session_id> -> 500. Mitigation in /app/backend/server.py payment_status endpoint: wrap call in try/except CheckoutError, and as a fallback use the raw Stripe SDK (already a transitive dep): `import stripe; stripe.api_key = STRIPE_API_KEY; s = stripe.checkout.Session.retrieve(session_id); status, pstatus = s.status, s.payment_status` — coerce s.metadata via `dict(s.metadata or {})`. Apply the DB update + order paid flow same as today. This keeps the UX resilient even if the library bug remains."
+}
