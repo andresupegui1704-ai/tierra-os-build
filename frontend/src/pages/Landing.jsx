@@ -11,6 +11,10 @@ const WOOD = "https://images.unsplash.com/photo-1514944040828-c79f6cd6eb43?crop=
 const BANCO = "/gallery/banco.webp";
 const TAVOLO = "/gallery/tavolo.webp";
 const SALA = "/gallery/sala.webp";
+const FACCIATA = "/gallery/facciata.webp";
+const DEHORS_1 = "/gallery/dehors-1.webp";
+const DEHORS_2 = "/gallery/dehors-2.webp";
+const DEHORS_3 = "/gallery/dehors-3.webp";
 
 const Pillar = ({ icon: Icon, title, children }) => (
     <div className="p-8 rounded-2xl bg-[#FFFDF7] border border-[#8A5B3D]/10 hover:border-[#8A5B3D]/30 transition-colors">
@@ -105,7 +109,7 @@ const Landing = () => {
             {/* HERO v2 — Logo lockup on dark photo (a second visual moment) */}
             <section className="relative">
                 <div className="relative h-[60vh] min-h-[420px] overflow-hidden">
-                    <img src={SALA} alt="Interni Tierra" className="absolute inset-0 w-full h-full object-cover" />
+                    <img src={DEHORS_3} alt="Il dehors di Tierra in Via Tirso al tramonto" className="absolute inset-0 w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-r from-[#2C2418]/85 via-[#2C2418]/55 to-transparent" />
                     <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center">
                         <div className="max-w-xl">
@@ -143,6 +147,63 @@ const Landing = () => {
                         </p>
                     </div>
                 </div>
+            </section>
+
+            {/* DEHORS — The outdoor experience */}
+            <section id="dehors" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-10">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
+                    {/* Big feature: entrance + chef */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 30 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: "-80px" }}
+                        transition={{ duration: 0.7 }}
+                        className="md:col-span-7 relative rounded-3xl overflow-hidden group"
+                    >
+                        <img src={FACCIATA} alt="L'ingresso di Tierra Organic Bistrot in Via Tirso 34, Roma" className="w-full h-full aspect-square md:aspect-auto object-cover group-hover:scale-[1.02] transition-transform duration-[1200ms]" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#2C2418]/70 via-transparent to-transparent" />
+                        <div className="absolute bottom-0 left-0 p-8 sm:p-10 text-[#F5EFE2]">
+                            <p className="overline text-[#EADFC9]">Il nostro dehors</p>
+                            <h2 className="h-display text-3xl sm:text-4xl lg:text-5xl mt-3 leading-tight">
+                                Sotto le <span className="italic">lanterne</span>,<br/>in Via Tirso.
+                            </h2>
+                        </div>
+                    </motion.div>
+
+                    {/* Supporting: two stacked photos */}
+                    <div className="md:col-span-5 grid grid-rows-2 gap-6">
+                        <motion.img
+                            initial={{ opacity: 0, y: 30 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true, margin: "-80px" }}
+                            transition={{ duration: 0.7, delay: 0.15 }}
+                            src={DEHORS_1}
+                            alt="Ospiti di Tierra al dehors durante l'aperitivo"
+                            className="w-full h-full object-cover rounded-3xl"
+                        />
+                        <motion.img
+                            initial={{ opacity: 0, y: 30 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true, margin: "-80px" }}
+                            transition={{ duration: 0.7, delay: 0.3 }}
+                            src={DEHORS_2}
+                            alt="Tavoli apparecchiati al dehors di Tierra all'ora blu"
+                            className="w-full h-full object-cover rounded-3xl"
+                        />
+                    </div>
+                </div>
+
+                <motion.p
+                    initial={{ opacity: 0, y: 10 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.7, delay: 0.2 }}
+                    className="mt-10 max-w-3xl text-[#5C4E3C] leading-relaxed"
+                >
+                    Un dehors coperto, foglie d'eucalipto essiccate, lanterne in rattan e funghi
+                    riscaldanti per stare fuori tutto l'anno. Un angolo di Roma dove il tempo rallenta
+                    — perfetto per una colazione lenta, un pranzo genuino o l'Aperitierra al tramonto.
+                </motion.p>
             </section>
 
             {/* SPECIALS (appears only if admin has marked any) */}
