@@ -128,7 +128,7 @@ const Landing = () => {
                     <div className="md:col-span-5">
                         <p className="overline">La nostra storia</p>
                         <h2 className="h-display text-4xl sm:text-5xl mt-4 text-[#2C2418]">
-                            Una cucina che <span className="italic text-[#8A5B3D]">ascolta</span> la terra.
+                            Una cucina che <span className="italic text-[#8A5B3D]">ascolta</span> la stagione.
                         </h2>
                     </div>
                     <div className="md:col-span-7 md:col-start-7">

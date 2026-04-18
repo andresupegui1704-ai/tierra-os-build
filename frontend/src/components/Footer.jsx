@@ -10,7 +10,7 @@ const Footer = () => (
                 <img src={LOGO} alt="Tierra Organic Bistrot Café" className="h-24 w-auto object-contain" style={{ filter: "brightness(0) invert(1) sepia(0.3) saturate(2) hue-rotate(40deg)" }} />
                 <p className="mt-6 text-[#EADFC9]/85 max-w-md leading-relaxed">
                     Un bistrot biologico nel cuore di Roma. Ingredienti di stagione, ricette d'autore,
-                    un'esperienza che celebra la terra.
+                    un'esperienza che celebra il gusto autentico.
                 </p>
             </div>
 
