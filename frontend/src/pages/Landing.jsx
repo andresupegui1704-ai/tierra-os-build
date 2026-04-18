@@ -111,7 +111,7 @@ const Landing = () => {
                         <div className="max-w-xl">
                             <img src={LOGO} alt="Tierra" className="h-28 w-auto object-contain drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" />
                             <h2 className="h-display text-4xl sm:text-5xl text-[#F5EFE2] mt-8">
-                                Benvenuti a casa <br/><span className="italic">della terra</span>.
+                                Benvenuti <span className="italic">a casa</span>.
                             </h2>
                             <p className="mt-5 text-[#EADFC9]/90 leading-relaxed">
                                 Colazioni lente, pranzi genuini, aperitivi al profumo di pomodoro fresco.
