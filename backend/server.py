@@ -18,7 +18,7 @@ from models import (
     CheckoutRequest, PaymentTransaction, AdminLogin, AdminToken,
 )
 from seed_data import CATEGORIES, ITEMS
-from customizations import bowl_groups, secondo_groups
+from customizations import bowl_groups, secondo_groups, CUSTOMIZATION_VERSION
 from email_service import send_order_confirmation, send_reservation_confirmation
 from auth import verify_admin, create_token, require_admin
 import storage as obj_storage
@@ -69,22 +69,22 @@ async def seed_on_startup():
 
 
 async def _ensure_customizations():
-    """Upsert customization_groups on the items that support personalization."""
-    bowl_items = await db.menu_items.find(
-        {"name": {"$in": ["Poke Media Bowl", "Poke Grande Bowl"]}}, {"_id": 0}
-    ).to_list(10)
-    for it in bowl_items:
-        if it.get("customization_groups"):
-            continue
-        groups = [CustomizationGroup(**g).model_dump() for g in bowl_groups()]
-        await db.menu_items.update_one({"id": it["id"]}, {"$set": {"customization_groups": groups}})
-        logger.info(f"Customizations applied to: {it['name']}")
+    """Upsert customization_groups on the items that support personalization.
+    Re-applies when CUSTOMIZATION_VERSION changes."""
+    async def apply(names: list[str], groups_fn):
+        items = await db.menu_items.find({"name": {"$in": names}}, {"_id": 0}).to_list(10)
+        for it in items:
+            if it.get("customization_version") == CUSTOMIZATION_VERSION:
+                continue
+            groups = [CustomizationGroup(**g).model_dump() for g in groups_fn()]
+            await db.menu_items.update_one(
+                {"id": it["id"]},
+                {"$set": {"customization_groups": groups, "customization_version": CUSTOMIZATION_VERSION}},
+            )
+            logger.info(f"Customizations v{CUSTOMIZATION_VERSION} applied to: {it['name']}")
 
-    secondo = await db.menu_items.find_one({"name": "Secondo con Contorno"}, {"_id": 0})
-    if secondo and not secondo.get("customization_groups"):
-        groups = [CustomizationGroup(**g).model_dump() for g in secondo_groups()]
-        await db.menu_items.update_one({"id": secondo["id"]}, {"$set": {"customization_groups": groups}})
-        logger.info("Customizations applied to: Secondo con Contorno")
+    await apply(["Poke Media Bowl", "Poke Grande Bowl"], bowl_groups)
+    await apply(["Secondo con Contorno"], secondo_groups)
 
 
 @app.on_event("shutdown")
