@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Leaf, Sprout, Heart, MessageCircle, MapPin, Clock } from "lucide-react";
 import { api } from "../lib/api";
 
-const LOGO = "/brand/tierra-logo.jpg";
+const LOGO = "/brand/tierra-logo.png";
 const POKE = "https://images.unsplash.com/photo-1759922222212-3657d43bd5b5?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
 const WOOD = "https://images.unsplash.com/photo-1514944040828-c79f6cd6eb43?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600";
 const AVOCADO = "https://images.unsplash.com/photo-1638720772346-b745bcd72f5f?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
@@ -107,13 +107,7 @@ const Landing = () => {
                     <div className="absolute inset-0 bg-gradient-to-r from-[#2C2418]/85 via-[#2C2418]/55 to-transparent" />
                     <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center">
                         <div className="max-w-xl">
-                            <div className="inline-flex items-center gap-4 bg-[#F5EFE2] rounded-2xl p-3 shadow-2xl">
-                                <img src={LOGO} alt="Tierra" className="h-16 w-16 object-contain" />
-                                <div className="pr-4">
-                                    <p className="font-serif text-lg text-[#7C9A4A] leading-none">Tierra</p>
-                                    <p className="text-[9px] tracking-[0.3em] uppercase text-[#8A5B3D] mt-1">organic · bistrot · cafè</p>
-                                </div>
-                            </div>
+                            <img src={LOGO} alt="Tierra" className="h-28 w-auto object-contain drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" />
                             <h2 className="h-display text-4xl sm:text-5xl text-[#F5EFE2] mt-8">
                                 Benvenuti a casa <br/><span className="italic">della terra</span>.
                             </h2>

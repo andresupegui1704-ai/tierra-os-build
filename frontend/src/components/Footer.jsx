@@ -1,15 +1,13 @@
 import React from "react";
 import { MapPin, Phone, Mail, MessageCircle } from "lucide-react";
 
-const LOGO = "/brand/tierra-logo.jpg";
+const LOGO = "/brand/tierra-logo.png";
 
 const Footer = () => (
     <footer id="contatti" data-testid="site-footer" className="mt-24 bg-[#2C2418] text-[#F5EFE2]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 grid grid-cols-1 md:grid-cols-4 gap-10">
             <div className="md:col-span-2">
-                <div className="inline-flex items-center gap-4 bg-[#F5EFE2] p-4 rounded-2xl">
-                    <img src={LOGO} alt="Tierra Organic Bistrot Café" className="h-20 w-20 object-contain" />
-                </div>
+                <img src={LOGO} alt="Tierra Organic Bistrot Café" className="h-24 w-auto object-contain" style={{ filter: "brightness(0) invert(1) sepia(0.3) saturate(2) hue-rotate(40deg)" }} />
                 <p className="mt-6 text-[#EADFC9]/85 max-w-md leading-relaxed">
                     Un bistrot biologico nel cuore di Roma. Ingredienti di stagione, ricette d'autore,
                     un'esperienza che celebra la terra.

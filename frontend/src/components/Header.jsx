@@ -4,7 +4,7 @@ import { ShoppingBag, MessageCircle } from "lucide-react";
 import { useCart } from "../context/CartContext";
 
 const WHATSAPP = "+393479915420";
-const LOGO = "/brand/tierra-logo.jpg";
+const LOGO = "/brand/tierra-logo.png";
 
 const Header = () => {
     const { count, setOpen } = useCart();
