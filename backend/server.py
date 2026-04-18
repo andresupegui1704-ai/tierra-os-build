@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pathlib import Path
 import os
 import logging
+import asyncio
 from typing import List, Optional
 
 from models import (
@@ -20,6 +21,7 @@ from auth import verify_admin, create_token, require_admin
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionRequest,
 )
+import stripe as stripe_sdk
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -260,19 +262,47 @@ async def payment_status(session_id: str, background: BackgroundTasks, http_requ
     if not tx:
         raise HTTPException(status_code=404, detail="Sessione non trovata")
 
+    # Instantiate StripeCheckout to configure stripe.api_base for the emergent proxy,
+    # then use raw SDK — emergentintegrations CheckoutStatusResponse fails to coerce
+    # Stripe's StripeObject metadata into a plain dict via Pydantic.
     host_url = str(http_request.base_url)
     webhook_url = f"{host_url}api/webhook/stripe"
-    stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
-    status = await stripe.get_checkout_status(session_id)
+    StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)  # sets stripe_sdk.api_base + api_key
+    # Explicitly ensure both are set on the shared stripe module state
+    stripe_sdk.api_key = STRIPE_API_KEY
+    if "sk_test_emergent" in STRIPE_API_KEY:
+        stripe_sdk.api_base = "https://integrations.emergentagent.com/stripe"
 
-    # Update transaction
+    logger.info(f"[stripe] retrieve {session_id} via base={stripe_sdk.api_base}")
+    session = None
+    last_err: Optional[Exception] = None
+    for attempt in range(4):
+        try:
+            session = await asyncio.to_thread(stripe_sdk.checkout.Session.retrieve, session_id)
+            break
+        except stripe_sdk.error.InvalidRequestError as e:
+            # Emergent proxy may return 404 briefly right after session creation.
+            last_err = e
+            await asyncio.sleep(1.2)
+        except Exception as e:
+            last_err = e
+            break
+    if session is None:
+        logger.error(f"Stripe session retrieve failed after retries: {last_err}")
+        # Return pending state so the UI keeps polling gracefully
+        return {"status": "open", "payment_status": "unpaid", "amount_total": 0, "currency": "eur"}
+
+    session_status = getattr(session, "status", None) or "open"
+    payment_status_val = getattr(session, "payment_status", None) or "unpaid"
+    amount_total = getattr(session, "amount_total", None) or 0
+    currency = getattr(session, "currency", None) or "eur"
+
     await db.payment_transactions.update_one(
         {"session_id": session_id},
-        {"$set": {"payment_status": status.payment_status, "status": status.status}},
+        {"$set": {"payment_status": payment_status_val, "status": session_status}},
     )
 
-    # Update order + send confirmation (once)
-    if status.payment_status == "paid" and tx.get("payment_status") != "paid":
+    if payment_status_val == "paid" and tx.get("payment_status") != "paid":
         order = await db.orders.find_one_and_update(
             {"id": tx["order_id"]},
             {"$set": {"payment_status": "paid", "status": "paid"}},
@@ -283,10 +313,10 @@ async def payment_status(session_id: str, background: BackgroundTasks, http_requ
             background.add_task(send_order_confirmation, order)
 
     return {
-        "status": status.status,
-        "payment_status": status.payment_status,
-        "amount_total": status.amount_total,
-        "currency": status.currency,
+        "status": session_status,
+        "payment_status": payment_status_val,
+        "amount_total": amount_total,
+        "currency": currency,
     }
 
 
