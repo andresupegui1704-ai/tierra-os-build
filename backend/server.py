@@ -1,5 +1,6 @@
 """Tierra Organic Bistro — FastAPI backend."""
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, BackgroundTasks, UploadFile, File, Form, Header, Query
+from fastapi.responses import Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -7,16 +8,20 @@ from pathlib import Path
 import os
 import logging
 import asyncio
+import uuid
 from typing import List, Optional
 
 from models import (
-    MenuCategory, MenuItem, MenuItemCreate, MenuItemUpdate,
+    MenuCategory, MenuCategoryCreate, MenuCategoryUpdate,
+    MenuItem, MenuItemCreate, MenuItemUpdate,
     OrderCreate, Order, ReservationCreate, Reservation,
     CheckoutRequest, PaymentTransaction, AdminLogin, AdminToken,
 )
 from seed_data import CATEGORIES, ITEMS
 from email_service import send_order_confirmation, send_reservation_confirmation
 from auth import verify_admin, create_token, require_admin
+import storage as obj_storage
+import escpos
 
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionRequest,
@@ -42,6 +47,8 @@ api = APIRouter(prefix="/api")
 # ---------- Bootstrap / Seed ----------
 @app.on_event("startup")
 async def seed_on_startup():
+    # Initialize object storage (best-effort)
+    obj_storage.init_storage()
     # Seed categories
     for cat in CATEGORIES:
         existing = await db.categories.find_one({"slug": cat["slug"]}, {"_id": 0})
@@ -311,6 +318,7 @@ async def payment_status(session_id: str, background: BackgroundTasks, http_requ
         )
         if order:
             background.add_task(send_order_confirmation, order)
+            await _enqueue_print(order["id"])
 
     return {
         "status": session_status,
@@ -346,6 +354,7 @@ async def stripe_webhook(request: Request):
             )
             if order:
                 await send_order_confirmation(order)
+                await _enqueue_print(order["id"])
     return {"received": True}
 
 
@@ -375,6 +384,155 @@ async def admin_set_res_status(res_id: str, status: str, _: str = Depends(requir
     if r.matched_count == 0:
         raise HTTPException(status_code=404, detail="Prenotazione non trovata")
     return {"ok": True}
+
+
+# ---------- Admin: Categories CRUD ----------
+@api.post("/admin/menu/categories", response_model=MenuCategory)
+async def admin_create_category(payload: MenuCategoryCreate, _: str = Depends(require_admin)):
+    existing = await db.categories.find_one({"slug": payload.slug}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Slug già esistente")
+    cat = MenuCategory(**payload.model_dump())
+    await db.categories.insert_one(cat.model_dump())
+    return cat
+
+
+@api.patch("/admin/menu/categories/{cat_id}", response_model=MenuCategory)
+async def admin_update_category(cat_id: str, payload: MenuCategoryUpdate, _: str = Depends(require_admin)):
+    update = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not update:
+        raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+    result = await db.categories.find_one_and_update(
+        {"id": cat_id}, {"$set": update}, return_document=True, projection={"_id": 0}
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Categoria non trovata")
+    return result
+
+
+@api.delete("/admin/menu/categories/{cat_id}")
+async def admin_delete_category(cat_id: str, _: str = Depends(require_admin)):
+    cat = await db.categories.find_one({"id": cat_id}, {"_id": 0})
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria non trovata")
+    n = await db.menu_items.count_documents({"category_slug": cat["slug"]})
+    if n > 0:
+        raise HTTPException(status_code=400, detail=f"Categoria non vuota: contiene {n} piatti")
+    await db.categories.delete_one({"id": cat_id})
+    return {"deleted": True}
+
+
+# ---------- Admin: Uploads (object storage) ----------
+_ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+_APP_NAME = os.environ.get("APP_NAME", "tierra-bistro")
+_MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB
+
+
+@api.post("/admin/uploads")
+async def admin_upload_image(file: UploadFile = File(...), _: str = Depends(require_admin)):
+    if file.content_type not in _ALLOWED_MIME:
+        raise HTTPException(status_code=400, detail="Formato non supportato. Usa JPG, PNG, WEBP o GIF.")
+    data = await file.read()
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File troppo grande (max 8 MB)")
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "bin"
+    file_id = str(uuid.uuid4())
+    path = f"{_APP_NAME}/menu/{file_id}.{ext}"
+    try:
+        result = await asyncio.to_thread(obj_storage.put_object, path, data, file.content_type)
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=502, detail="Caricamento fallito, riprova")
+    await db.files.insert_one({
+        "id": file_id,
+        "storage_path": result["path"],
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "size": result.get("size", len(data)),
+        "is_deleted": False,
+        "created_at": obj_storage.__dict__.get("_noop", None) or __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+    })
+    return {"id": file_id, "url": f"/api/files/{file_id}", "path": result["path"]}
+
+
+@api.get("/files/{file_id}")
+async def serve_file(file_id: str):
+    """Public file serving (images on menu should be visible to anyone)."""
+    record = await db.files.find_one({"id": file_id, "is_deleted": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="File non trovato")
+    try:
+        data, ct = await asyncio.to_thread(obj_storage.get_object, record["storage_path"])
+    except Exception as e:
+        logger.error(f"Storage get failed: {e}")
+        raise HTTPException(status_code=502, detail="Errore recupero file")
+    return Response(content=data, media_type=record.get("content_type") or ct, headers={"Cache-Control": "public, max-age=86400"})
+
+
+# ---------- Print queue (polled by local Sunmi print agent) ----------
+def _require_print_agent(x_print_token: str = Header(default="")) -> bool:
+    expected = os.environ.get("PRINT_AGENT_TOKEN", "")
+    if not expected or x_print_token != expected:
+        raise HTTPException(status_code=401, detail="Invalid print agent token")
+    return True
+
+
+@api.get("/print/pending")
+async def print_pending(_: bool = Depends(_require_print_agent), limit: int = 10):
+    """Print agent polls this. Returns orders queued for printing with ESC/POS payload."""
+    jobs = await db.print_queue.find({"status": "queued"}, {"_id": 0}).sort("created_at", 1).to_list(max(1, min(limit, 20)))
+    output = []
+    for j in jobs:
+        order = await db.orders.find_one({"id": j["order_id"]}, {"_id": 0})
+        if not order:
+            continue
+        output.append({
+            "job_id": j["id"],
+            "order_id": j["order_id"],
+            "created_at": j["created_at"],
+            "escpos_base64": escpos.encode_job(order),
+        })
+    return {"jobs": output}
+
+
+@api.post("/print/ack/{job_id}")
+async def print_ack(job_id: str, success: bool = True, _: bool = Depends(_require_print_agent)):
+    status = "printed" if success else "failed"
+    r = await db.print_queue.update_one({"id": job_id}, {"$set": {"status": status, "acked_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Job non trovato")
+    return {"ok": True, "status": status}
+
+
+@api.post("/admin/print/reprint/{order_id}")
+async def admin_reprint(order_id: str, _: str = Depends(require_admin)):
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Ordine non trovato")
+    job = {
+        "id": str(uuid.uuid4()),
+        "order_id": order_id,
+        "status": "queued",
+        "created_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+    }
+    await db.print_queue.insert_one(job)
+    return {"ok": True, "job_id": job["id"]}
+
+
+async def _enqueue_print(order_id: str) -> None:
+    job = {
+        "id": str(uuid.uuid4()),
+        "order_id": order_id,
+        "status": "queued",
+        "created_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+    }
+    await db.print_queue.insert_one(job)
+
+
+@api.get("/admin/print/queue")
+async def admin_print_queue(_: str = Depends(require_admin)):
+    rows = await db.print_queue.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return rows
 
 
 # Include + CORS

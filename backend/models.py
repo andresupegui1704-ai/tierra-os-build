@@ -25,6 +25,24 @@ class MenuCategory(BaseModel):
     active: bool = True
 
 
+class MenuCategoryCreate(BaseModel):
+    slug: str
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    order: int = 0
+    active: bool = True
+
+
+class MenuCategoryUpdate(BaseModel):
+    slug: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    order: Optional[int] = None
+    active: Optional[bool] = None
+
+
 class MenuItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=_uuid)
