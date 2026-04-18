@@ -22,6 +22,7 @@ from seed_data import CATEGORIES, ITEMS
 from customizations import bowl_groups, secondo_groups, CUSTOMIZATION_VERSION
 from email_service import send_order_confirmation, send_reservation_confirmation
 from auth import verify_admin, create_token, require_admin
+from brand_config import BRAND as BRAND_CFG
 import storage as obj_storage
 import escpos
 import image_utils
@@ -102,10 +103,10 @@ async def root():
 @api.get("/info")
 async def restaurant_info():
     return {
-        "name": os.environ.get("RESTAURANT_NAME", "Tierra Organic Bistro"),
-        "address": os.environ.get("RESTAURANT_ADDRESS", ""),
-        "whatsapp": os.environ.get("RESTAURANT_WHATSAPP", ""),
-        "email": os.environ.get("RESTAURANT_EMAIL", ""),
+        "name": os.environ.get("RESTAURANT_NAME", BRAND_CFG["full_name"]),
+        "address": os.environ.get("RESTAURANT_ADDRESS", BRAND_CFG["address_full"]),
+        "whatsapp": os.environ.get("RESTAURANT_WHATSAPP", BRAND_CFG["phone_whatsapp"]),
+        "email": os.environ.get("RESTAURANT_EMAIL", BRAND_CFG["email"]),
     }
 
 

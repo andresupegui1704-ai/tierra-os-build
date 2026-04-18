@@ -1,7 +1,8 @@
 import React from "react";
 import { Star, ArrowUpRight, Gift } from "lucide-react";
+import { BRAND } from "../config/brand";
 
-export const GOOGLE_REVIEW_URL = "https://share.google/eVhM03mToB5eMlaWw";
+export const GOOGLE_REVIEW_URL = BRAND.links.googleReview;
 
 const GoogleG = ({ size = 18 }) => (
     <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">

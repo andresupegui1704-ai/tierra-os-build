@@ -1,4 +1,4 @@
-"""Email service using Resend for Tierra Organic Bistro.
+"""Email service using Resend for the bistrot.
 
 Graceful degradation: if RESEND_API_KEY is not configured or invalid,
 emails are logged but the API call doesn't fail.
@@ -7,15 +7,16 @@ import os
 import asyncio
 import logging
 import resend
+from brand_config import BRAND
 
 logger = logging.getLogger(__name__)
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
-RESTAURANT_EMAIL = os.environ.get("RESTAURANT_EMAIL", "")
-RESTAURANT_NAME = os.environ.get("RESTAURANT_NAME", "Tierra Organic Bistro")
-RESTAURANT_ADDRESS = os.environ.get("RESTAURANT_ADDRESS", "Via Tirso 34, Roma")
-RESTAURANT_WHATSAPP = os.environ.get("RESTAURANT_WHATSAPP", "")
+RESTAURANT_EMAIL = os.environ.get("RESTAURANT_EMAIL", BRAND["email"])
+RESTAURANT_NAME = os.environ.get("RESTAURANT_NAME", BRAND["full_name"])
+RESTAURANT_ADDRESS = os.environ.get("RESTAURANT_ADDRESS", BRAND["address_full"])
+RESTAURANT_WHATSAPP = os.environ.get("RESTAURANT_WHATSAPP", BRAND["phone_whatsapp"])
 
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
@@ -30,7 +31,7 @@ def _base_template(title: str, body_html: str) -> str:
   <tr><td align="center">
     <table width="600" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:16px;overflow:hidden;border:1px solid rgba(43,74,51,0.12);">
       <tr><td style="background:#2B4A33;padding:32px 40px;">
-        <h1 style="margin:0;color:#F9F6F0;font-family:Georgia,serif;font-size:28px;letter-spacing:-0.5px;">Tierra <span style="font-style:italic;color:#C46D46;">Organic Bistro</span></h1>
+        <h1 style="margin:0;color:#F9F6F0;font-family:Georgia,serif;font-size:28px;letter-spacing:-0.5px;">{BRAND['name']} <span style="font-style:italic;color:#C46D46;">{BRAND['short_descriptor']}</span></h1>
         <p style="margin:6px 0 0;color:#F1EBE1;font-size:12px;letter-spacing:3px;text-transform:uppercase;">{RESTAURANT_ADDRESS}</p>
       </td></tr>
       <tr><td style="padding:40px;">

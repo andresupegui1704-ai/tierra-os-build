@@ -5,6 +5,7 @@ import { ArrowRight, Leaf, Sprout, Heart, MessageCircle, MapPin, Clock } from "l
 import { api } from "../lib/api";
 import SpecialsBanner from "../components/SpecialsBanner";
 import { ReviewCTACard } from "../components/ReviewCTA";
+import { BRAND, waLink } from "../config/brand";
 
 const LOGO = "/brand/tierra-logo.png";
 const POKE = "https://images.unsplash.com/photo-1759922222212-3657d43bd5b5?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
@@ -87,7 +88,7 @@ const Landing = () => {
                             Prenota un tavolo
                         </Link>
                         <a
-                            href="https://wa.me/393479915420?text=Ciao%20Tierra!"
+                            href={waLink(BRAND.copy.whatsappShortText)}
                             target="_blank" rel="noreferrer"
                             data-testid="hero-cta-whatsapp"
                             className="btn-outline-brand"
@@ -284,15 +285,15 @@ const Landing = () => {
                     <div>
                         <p className="overline text-[#EADFC9]">Ti aspettiamo</p>
                         <h2 className="h-display text-4xl sm:text-5xl mt-4">
-                            Vieni a trovarci in <span className="italic">Via Tirso 34</span>.
+                            Vieni a trovarci in <span className="italic">{BRAND.address.street}</span>.
                         </h2>
                         <ul className="mt-10 space-y-4 text-[#EADFC9]">
-                            <li className="flex items-start gap-3"><MapPin size={18} strokeWidth={1.5} className="mt-0.5 shrink-0" /><span>Via Tirso 34, Roma</span></li>
-                            <li className="flex items-start gap-3"><Clock size={18} strokeWidth={1.5} className="mt-0.5 shrink-0" /><span>Lun – Ven 08:00 – 23:00 · Sab – Dom 09:00 – 23:30</span></li>
+                            <li className="flex items-start gap-3"><MapPin size={18} strokeWidth={1.5} className="mt-0.5 shrink-0" /><span>{BRAND.address.full}</span></li>
+                            <li className="flex items-start gap-3"><Clock size={18} strokeWidth={1.5} className="mt-0.5 shrink-0" /><span>{BRAND.hours.map((h) => `${h.days} ${h.time}`).join(" · ")}</span></li>
                         </ul>
                         <div className="mt-10 flex gap-4 flex-wrap">
                             <Link to="/prenota" className="btn-outline-brand" style={{color: "#F5EFE2", borderColor: "rgba(245,239,226,0.5)"}}>Prenota</Link>
-                            <a href="https://wa.me/393479915420" target="_blank" rel="noreferrer" data-testid="contact-whatsapp" className="btn-accent">
+                            <a href={waLink()} target="_blank" rel="noreferrer" data-testid="contact-whatsapp" className="btn-accent">
                                 <MessageCircle size={18} /> WhatsApp
                             </a>
                         </div>

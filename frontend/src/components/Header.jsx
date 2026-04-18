@@ -2,9 +2,7 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ShoppingBag, MessageCircle } from "lucide-react";
 import { useCart } from "../context/CartContext";
-
-const WHATSAPP = "+393479915420";
-const LOGO = "/brand/tierra-logo.png";
+import { BRAND, waLink } from "../config/brand";
 
 const Header = () => {
     const { count, setOpen } = useCart();
@@ -20,10 +18,10 @@ const Header = () => {
         >
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-20">
                 <Link to="/" data-testid="logo-link" className="flex items-center gap-3">
-                    <img src={LOGO} alt="Tierra Organic Bistrot Café" className="h-14 w-14 object-contain" />
+                    <img src={BRAND.assets.logo} alt={BRAND.fullName} className="h-14 w-14 object-contain" />
                     <div className="hidden sm:flex flex-col leading-tight">
-                        <span className="font-serif text-xl text-[#7C9A4A] tracking-wide">Tierra</span>
-                        <span className="text-[9px] tracking-[0.28em] uppercase text-[#8A5B3D]">organic · bistrot · cafè</span>
+                        <span className="font-serif text-xl text-[#7C9A4A] tracking-wide">{BRAND.name}</span>
+                        <span className="text-[9px] tracking-[0.28em] uppercase text-[#8A5B3D]">{BRAND.shortDescriptor}</span>
                     </div>
                 </Link>
 
@@ -37,7 +35,7 @@ const Header = () => {
                 <div className="flex items-center gap-2">
                     <a
                         data-testid="whatsapp-header-btn"
-                        href={`https://wa.me/${WHATSAPP.replace("+", "")}`}
+                        href={waLink()}
                         target="_blank" rel="noreferrer"
                         className="hidden sm:inline-flex items-center gap-2 text-sm text-[#7C9A4A] hover:text-[#8A5B3D] transition-colors"
                     >

@@ -5,6 +5,7 @@ Outputs are returned as base64 so they can be transported over JSON.
 """
 import base64
 from datetime import datetime
+from brand_config import BRAND
 
 
 # ESC/POS control codes
@@ -41,10 +42,10 @@ def build_order_ticket(order: dict, copy_label: str = "") -> bytes:
         out += ALIGN_CENTER + BOLD_ON + copy_label.encode("cp858") + b"\n" + BOLD_OFF
     # Header
     out += ALIGN_CENTER + BOLD_ON + DOUBLE_HW
-    out += b"TIERRA\n"
+    out += (BRAND["receipt_header_title"] + "\n").encode("cp858", errors="replace")
     out += DOUBLE_OFF + BOLD_OFF
-    out += b"Organic Bistrot Cafe\n"
-    out += b"Via Tirso 34 - Roma\n"
+    out += (BRAND["receipt_header_subtitle"] + "\n").encode("cp858", errors="replace")
+    out += (BRAND["receipt_header_address"] + "\n").encode("cp858", errors="replace")
     out += FEED_N(1)
     # Order meta
     out += ALIGN_LEFT + BOLD_ON
