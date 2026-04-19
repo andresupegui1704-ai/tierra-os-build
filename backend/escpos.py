@@ -182,6 +182,72 @@ def build_cashier_ticket(order: dict) -> bytes:
     return bytes(out)
 
 
+def build_reservation_ticket(reservation: dict) -> bytes:
+    """Reservation confirmation ticket — for front desk / host station."""
+    out = bytearray()
+    out += INIT
+    out += ALIGN_CENTER + BOLD_ON + DOUBLE_HW + b"PRENOTAZIONE\n" + DOUBLE_OFF + BOLD_OFF
+    out += ALIGN_CENTER + (BRAND["receipt_header_title"] + "\n").encode("cp858", errors="replace")
+    out += (BRAND["receipt_header_subtitle"] + "\n").encode("cp858", errors="replace")
+    out += LINE
+    out += ALIGN_LEFT
+    # Big date + time
+    date_str = reservation.get("date", "")
+    time_str = reservation.get("time", "")
+    # Parse date to human readable (es. 19/04/2026)
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        pretty_date = dt.strftime("%d/%m/%Y")
+    except Exception:
+        pretty_date = date_str
+    out += BOLD_ON + DOUBLE_HW
+    out += f"{pretty_date} - {time_str}\n".encode("cp858", errors="replace")
+    out += DOUBLE_OFF + BOLD_OFF
+    # Guests (big)
+    guests = reservation.get("guests", 0)
+    out += BOLD_ON + DOUBLE_HW
+    out += f"{guests} coperti\n".encode("cp858", errors="replace")
+    out += DOUBLE_OFF + BOLD_OFF
+    out += LINE
+    # Customer info
+    out += _line("Cliente:", (reservation.get("customer_name") or "")[:28])
+    out += _line("Tel:", (reservation.get("customer_phone") or "-")[:28])
+    email = reservation.get("customer_email") or ""
+    if email:
+        out += b"Email:\n"
+        out += email[:42].encode("cp858", errors="replace") + b"\n"
+    if reservation.get("table_code"):
+        out += BOLD_ON + _line("Tavolo:", reservation["table_code"]) + BOLD_OFF
+    out += LINE
+    # Notes
+    if reservation.get("notes"):
+        out += BOLD_ON + b"NOTE:\n" + BOLD_OFF
+        nts = reservation["notes"]
+        while nts:
+            out += nts[:42].encode("cp858", errors="replace") + b"\n"
+            nts = nts[42:]
+        out += LINE
+    # Status stamp
+    status = reservation.get("status", "")
+    if status in ("confirmed",):
+        out += ALIGN_CENTER + BOLD_ON + b"*** CONFERMATA ***\n" + BOLD_OFF + ALIGN_LEFT
+    # Footer
+    out += ALIGN_CENTER
+    try:
+        now_ts = datetime.now().strftime("%d/%m %H:%M")
+    except Exception:
+        now_ts = ""
+    out += f"Stampata: {now_ts}\n".encode("cp858", errors="replace")
+    out += FEED_N(3) + CUT
+    return bytes(out)
+
+
+def encode_reservation_job(reservation: dict) -> str:
+    """Return a base64-encoded ESC/POS payload for a reservation (2 copies: desk + customer)."""
+    out = build_reservation_ticket(reservation) + build_reservation_ticket(reservation)
+    return base64.b64encode(bytes(out)).decode("ascii")
+
+
 def build_order_ticket(order: dict, copy_label: str = "") -> bytes:
     """Legacy single-copy ticket — kept for backward compatibility. Alias to cashier_ticket."""
     out = bytearray()

@@ -562,12 +562,18 @@ async def stripe_webhook(request: Request):
 
 # ---------- Reservations ----------
 @api.post("/reservations", response_model=Reservation)
-async def create_reservation(payload: ReservationCreate, background: BackgroundTasks):
+async def create_reservation(payload: ReservationCreate):
+    """Customer-facing endpoint: create a reservation in PENDING status.
+
+    No email + no print is triggered until admin explicitly confirms via
+    POST /admin/reservations/{id}/status?status=confirmed.
+    """
     if payload.guests < 1 or payload.guests > 20:
         raise HTTPException(status_code=400, detail="Numero ospiti non valido (1-20)")
-    res = Reservation(**payload.model_dump())
+    res = Reservation(**payload.model_dump())  # status defaults to "pending"
     await db.reservations.insert_one(res.model_dump())
-    background.add_task(send_reservation_confirmation, res.model_dump())
+    logger.info("Reservation %s created (pending) for %s guests on %s %s",
+                res.id, res.guests, res.date, res.time)
     return res
 
 
@@ -578,14 +584,41 @@ async def admin_list_reservations(_: str = Depends(require_admin)):
 
 
 @api.post("/admin/reservations/{res_id}/status")
-async def admin_set_res_status(res_id: str, status: str, _: str = Depends(require_admin)):
-    allowed = {"pending", "confirmed", "cancelled"}
+async def admin_set_res_status(
+    res_id: str,
+    status: str,
+    background: BackgroundTasks,
+    _: str = Depends(require_admin),
+):
+    """Update reservation status. On "confirmed" → send email + queue a print job."""
+    allowed = {"pending", "confirmed", "arrived", "cancelled", "no_show"}
     if status not in allowed:
         raise HTTPException(status_code=400, detail="Stato non valido")
-    r = await db.reservations.update_one({"id": res_id}, {"$set": {"status": status}})
-    if r.matched_count == 0:
+    existing = await db.reservations.find_one({"id": res_id}, {"_id": 0})
+    if not existing:
         raise HTTPException(status_code=404, detail="Prenotazione non trovata")
-    return {"ok": True}
+    previous_status = existing.get("status")
+    await db.reservations.update_one(
+        {"id": res_id},
+        {"$set": {"status": status, "status_updated_at": _now_iso()}},
+    )
+    existing["status"] = status
+
+    # Confirmation side-effects: email + print (only on transition INTO "confirmed")
+    if status == "confirmed" and previous_status != "confirmed":
+        background.add_task(send_reservation_confirmation, existing)
+        # Queue the reservation print job (distinct from order print jobs)
+        job = {
+            "id": _uuid(),
+            "reservation_id": res_id,
+            "job_type": "reservation",
+            "status": "queued",
+            "created_at": _now_iso(),
+        }
+        await db.print_queue.insert_one(job)
+        logger.info("Reservation %s confirmed → email + print queued", res_id)
+
+    return {"ok": True, "status": status}
 
 
 # ---------- Admin: Categories CRUD ----------
@@ -687,19 +720,37 @@ def _require_print_agent(x_print_token: str = Header(default="")) -> bool:
 
 @api.get("/print/pending")
 async def print_pending(_: bool = Depends(_require_print_agent), limit: int = 10):
-    """Print agent polls this. Returns orders queued for printing with ESC/POS payload."""
+    """Print agent polls this. Returns queued print jobs as ESC/POS payloads.
+
+    Supports two job types:
+      - Orders (default) → kitchen + cashier tickets
+      - Reservations (job_type='reservation') → 2 identical confirmation tickets
+    """
     jobs = await db.print_queue.find({"status": "queued"}, {"_id": 0}).sort("created_at", 1).to_list(max(1, min(limit, 20)))
     output = []
     for j in jobs:
-        order = await db.orders.find_one({"id": j["order_id"]}, {"_id": 0})
-        if not order:
-            continue
-        output.append({
-            "job_id": j["id"],
-            "order_id": j["order_id"],
-            "created_at": j["created_at"],
-            "escpos_base64": escpos.encode_job(order, mode="kitchen+cashier"),
-        })
+        if j.get("job_type") == "reservation":
+            res = await db.reservations.find_one({"id": j.get("reservation_id")}, {"_id": 0})
+            if not res:
+                continue
+            output.append({
+                "job_id": j["id"],
+                "job_type": "reservation",
+                "reservation_id": j["reservation_id"],
+                "created_at": j["created_at"],
+                "escpos_base64": escpos.encode_reservation_job(res),
+            })
+        else:
+            order = await db.orders.find_one({"id": j.get("order_id")}, {"_id": 0})
+            if not order:
+                continue
+            output.append({
+                "job_id": j["id"],
+                "job_type": "order",
+                "order_id": j["order_id"],
+                "created_at": j["created_at"],
+                "escpos_base64": escpos.encode_job(order, mode="kitchen+cashier"),
+            })
     return {"jobs": output}
 
 

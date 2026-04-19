@@ -80,6 +80,21 @@ const AdminDashboard = () => {
 
     const logout = () => { localStorage.removeItem("tierra_admin_token"); nav("/admin"); };
 
+    const updateReservationStatus = async (id, status) => {
+        try {
+            await api.post(`/admin/reservations/${id}/status?status=${status}`);
+            setReservations((prev) => prev.map((r) => r.id === id ? { ...r, status } : r));
+            const labels = {
+                confirmed: "Prenotazione confermata — email inviata e stampa accodata",
+                cancelled: "Prenotazione annullata",
+                arrived: "Ospite contrassegnato come arrivato",
+            };
+            toast.success(labels[status] || "Stato aggiornato");
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "Errore aggiornamento");
+        }
+    };
+
     const toggleItem = async (id) => {
         try {
             const { data } = await api.post(`/admin/menu/items/${id}/toggle`);
@@ -239,21 +254,70 @@ const AdminDashboard = () => {
                     <section>
                         <p className="overline">Prenotazioni</p>
                         <h2 className="h-display text-4xl mt-2">Richieste tavolo</h2>
+                        <p className="text-sm text-[#5C4E3C] mt-1">Le richieste arrivano in stato <strong>in attesa</strong>. Conferma solo quando hai verificato la disponibilità: alla conferma parte l'email al cliente e la stampa in cassa.</p>
                         <div className="mt-8 space-y-4">
-                            {reservations.length === 0 ? <p className="text-[#5C4E3C] italic">Nessuna prenotazione.</p> : reservations.map((r) => (
-                                <div key={r.id} data-testid={`reservation-row-${r.id}`} className="bg-white rounded-xl p-5 border border-[#8A5B3D]/10 flex justify-between items-start gap-4 flex-wrap">
-                                    <div>
-                                        <p className="font-medium">{r.customer_name} <span className="text-[#5C4E3C] text-sm">· {r.customer_phone}</span></p>
-                                        <p className="text-sm text-[#5C4E3C]">{r.customer_email}</p>
-                                        {r.notes && <p className="mt-2 text-xs italic text-[#5C4E3C]">Note: {r.notes}</p>}
+                            {reservations.length === 0 ? <p className="text-[#5C4E3C] italic">Nessuna prenotazione.</p> : reservations.map((r) => {
+                                const statusConfig = {
+                                    pending:   { label: "In attesa", bg: "bg-[#C89B3C]/15", text: "text-[#8A6A14]" },
+                                    confirmed: { label: "Confermata", bg: "bg-[#7C9A4A]/20", text: "text-[#5E7F32]" },
+                                    arrived:   { label: "Arrivato", bg: "bg-[#5E7F32]/25", text: "text-[#3E5822]" },
+                                    cancelled: { label: "Annullata", bg: "bg-[#923F28]/15", text: "text-[#923F28]" },
+                                    no_show:   { label: "No-show", bg: "bg-[#6F4527]/15", text: "text-[#6F4527]" },
+                                }[r.status] || { label: r.status, bg: "bg-[#8A5B3D]/15", text: "text-[#8A5B3D]" };
+                                return (
+                                    <div key={r.id} data-testid={`reservation-row-${r.id}`} className="bg-white rounded-xl p-5 border border-[#8A5B3D]/10 flex justify-between items-start gap-4 flex-wrap">
+                                        <div className="flex-1 min-w-[200px]">
+                                            <p className="font-medium">{r.customer_name} <span className="text-[#5C4E3C] text-sm">· {r.customer_phone}</span></p>
+                                            <p className="text-sm text-[#5C4E3C]">{r.customer_email}</p>
+                                            {r.table_code && <p className="mt-1 text-sm text-[#7C9A4A]">Tavolo: <strong>{r.table_code}</strong></p>}
+                                            {r.notes && <p className="mt-2 text-xs italic text-[#5C4E3C]">Note: {r.notes}</p>}
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="font-serif text-2xl text-[#7C9A4A]">{r.date} · {r.time}</p>
+                                            <p className="text-sm text-[#5C4E3C]">{r.guests} {r.guests === 1 ? "ospite" : "ospiti"}</p>
+                                            <span className={`inline-block mt-2 text-xs px-2.5 py-0.5 rounded-full ${statusConfig.bg} ${statusConfig.text}`}>{statusConfig.label}</span>
+                                            <div className="mt-3 flex gap-2 justify-end flex-wrap">
+                                                {r.status === "pending" && (
+                                                    <>
+                                                        <button
+                                                            data-testid={`confirm-reservation-${r.id}`}
+                                                            onClick={() => updateReservationStatus(r.id, "confirmed")}
+                                                            className="px-3 py-1.5 rounded-full bg-[#7C9A4A] text-white text-xs hover:bg-[#5E7F32] inline-flex items-center gap-1"
+                                                        >
+                                                            <Check size={12} /> Conferma & stampa
+                                                        </button>
+                                                        <button
+                                                            data-testid={`cancel-reservation-${r.id}`}
+                                                            onClick={() => updateReservationStatus(r.id, "cancelled")}
+                                                            className="px-3 py-1.5 rounded-full bg-white border border-[#923F28]/40 text-[#923F28] text-xs hover:bg-[#923F28]/5"
+                                                        >
+                                                            Annulla
+                                                        </button>
+                                                    </>
+                                                )}
+                                                {r.status === "confirmed" && (
+                                                    <>
+                                                        <button
+                                                            data-testid={`arrived-reservation-${r.id}`}
+                                                            onClick={() => updateReservationStatus(r.id, "arrived")}
+                                                            className="px-3 py-1.5 rounded-full bg-[#5E7F32] text-white text-xs hover:bg-[#3E5822]"
+                                                        >
+                                                            Arrivato
+                                                        </button>
+                                                        <button
+                                                            data-testid={`cancel-reservation-${r.id}`}
+                                                            onClick={() => updateReservationStatus(r.id, "cancelled")}
+                                                            className="px-3 py-1.5 rounded-full bg-white border border-[#923F28]/40 text-[#923F28] text-xs hover:bg-[#923F28]/5"
+                                                        >
+                                                            Annulla
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="font-serif text-2xl text-[#7C9A4A]">{r.date} · {r.time}</p>
-                                        <p className="text-sm text-[#5C4E3C]">{r.guests} {r.guests === 1 ? "ospite" : "ospiti"}</p>
-                                        <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-[#8A5B3D]/15 text-[#8A5B3D]">{r.status}</span>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </section>
                 )}

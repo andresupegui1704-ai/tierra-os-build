@@ -43,7 +43,7 @@ const ReservationsPage = () => {
             };
             const { data } = await api.post("/reservations", payload);
             setSuccess(data);
-            toast.success("Prenotazione ricevuta!");
+            toast.success("Richiesta ricevuta — ti confermeremo a breve");
         } catch (err) {
             toast.error(err?.response?.data?.detail || "Errore nella prenotazione");
         } finally {
@@ -61,7 +61,13 @@ const ReservationsPage = () => {
                         <p className="mt-4 text-[#515E4C]">
                             Abbiamo ricevuto la tua richiesta per <strong>{success.date}</strong> alle <strong>{success.time}</strong> per <strong>{success.guests}</strong> persone.
                         </p>
-                        <p className="mt-2 text-[#515E4C]">Ti contatteremo a breve per confermare.</p>
+                        <div className="mt-5 inline-flex items-center gap-2 text-xs uppercase tracking-widest text-[#C89B3C] bg-[#FCF5E3] px-4 py-2 rounded-full">
+                            <span className="inline-block w-2 h-2 rounded-full bg-[#C89B3C] animate-pulse" />
+                            In attesa di conferma
+                        </div>
+                        <p className="mt-4 text-sm text-[#515E4C]">
+                            Riceverai un'email di conferma non appena il nostro team verificherà la disponibilità.
+                        </p>
                         <button onClick={() => { setSuccess(null); setForm({ customer_name: "", customer_phone: "", customer_email: "", date: null, time: "", guests: "2", notes: "" }); }} className="btn-outline-brand mt-6">Nuova prenotazione</button>
                     </div>
                 </div>
