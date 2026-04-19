@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ShoppingBag, MessageCircle } from "lucide-react";
+import { ShoppingBag, MessageCircle, Instagram } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { BRAND, waLink } from "../config/brand";
 
@@ -33,6 +33,17 @@ const Header = () => {
                 </nav>
 
                 <div className="flex items-center gap-2">
+                    {BRAND.links.instagram && (
+                        <a
+                            data-testid="instagram-header-btn"
+                            href={BRAND.links.instagram}
+                            target="_blank" rel="noreferrer"
+                            aria-label="Instagram"
+                            className="hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-full text-[#8A5B3D] hover:text-[#7C9A4A] hover:bg-[#EADFC9]/60 transition-colors"
+                        >
+                            <Instagram size={18} strokeWidth={1.6} />
+                        </a>
+                    )}
                     <a
                         data-testid="whatsapp-header-btn"
                         href={waLink()}

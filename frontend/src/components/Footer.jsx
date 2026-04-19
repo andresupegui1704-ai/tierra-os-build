@@ -1,5 +1,5 @@
 import React from "react";
-import { MapPin, Phone, Mail, MessageCircle } from "lucide-react";
+import { MapPin, Phone, Mail, MessageCircle, Instagram } from "lucide-react";
 import { BRAND, waLink, telLink, mailtoLink } from "../config/brand";
 
 const Footer = () => (
@@ -10,6 +10,18 @@ const Footer = () => (
                 <p className="mt-6 text-[#EADFC9]/85 max-w-md leading-relaxed">
                     {BRAND.copy.footerDescription}
                 </p>
+                {BRAND.links.instagram && (
+                    <a
+                        data-testid="footer-instagram"
+                        href={BRAND.links.instagram}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-6 inline-flex items-center gap-2 text-sm text-[#EADFC9] hover:text-[#A5B276] transition-colors"
+                    >
+                        <Instagram size={18} strokeWidth={1.5} />
+                        <span>{BRAND.links.instagramHandle}</span>
+                    </a>
+                )}
             </div>
 
             <div>
@@ -19,6 +31,9 @@ const Footer = () => (
                     <li className="flex items-start gap-3"><Phone size={16} strokeWidth={1.5} className="mt-0.5" /><a href={telLink()} className="hover:text-[#A5B276]">{BRAND.phone.display}</a></li>
                     <li className="flex items-start gap-3"><Mail size={16} strokeWidth={1.5} className="mt-0.5" /><a href={mailtoLink()} className="hover:text-[#A5B276] break-all">{BRAND.email}</a></li>
                     <li className="flex items-start gap-3"><MessageCircle size={16} strokeWidth={1.5} className="mt-0.5" /><a href={waLink()} target="_blank" rel="noreferrer" className="hover:text-[#A5B276]">WhatsApp</a></li>
+                    {BRAND.links.instagram && (
+                        <li className="flex items-start gap-3"><Instagram size={16} strokeWidth={1.5} className="mt-0.5" /><a href={BRAND.links.instagram} target="_blank" rel="noreferrer" className="hover:text-[#A5B276]">Instagram</a></li>
+                    )}
                 </ul>
             </div>
 

@@ -43,6 +43,11 @@ export const BRAND = {
     // ─── External links ────────────────────────────────────────────
     links: {
         googleReview: "https://share.google/eVhM03mToB5eMlaWw",
+        instagram: "https://instagram.com/tierra_organic_bistrot",
+        instagramHandle: "@tierra_organic_bistrot",
+        // Embed URL for Google Maps (query mode — no API key needed)
+        mapsEmbed: "https://www.google.com/maps?q=Via+Tirso+34,+Roma&output=embed&z=16",
+        mapsDirections: "https://www.google.com/maps/dir/?api=1&destination=Via+Tirso+34,+Roma",
     },
 
     // ─── Image assets (all live under /app/frontend/public) ────────

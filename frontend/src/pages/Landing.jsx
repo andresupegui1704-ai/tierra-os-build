@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, Leaf, Sprout, Heart, MessageCircle, MapPin, Clock } from "lucide-react";
+import { ArrowRight, Leaf, Sprout, Heart, MessageCircle, MapPin, Clock, Navigation, Instagram } from "lucide-react";
 import { api } from "../lib/api";
 import SpecialsBanner from "../components/SpecialsBanner";
 import { ReviewCTACard } from "../components/ReviewCTA";
@@ -11,7 +11,6 @@ const LOGO = "/brand/tierra-logo.png";
 const POKE = "https://images.unsplash.com/photo-1759922222212-3657d43bd5b5?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
 const WOOD = "https://images.unsplash.com/photo-1514944040828-c79f6cd6eb43?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600";
 const BANCO = "/gallery/banco.webp";
-const TAVOLO = "/gallery/tavolo.webp";
 const SALA = "/gallery/sala.webp";
 const FACCIATA = "/gallery/facciata.webp";
 const DEHORS_1 = "/gallery/dehors-1.webp";
@@ -291,14 +290,47 @@ const Landing = () => {
                             <li className="flex items-start gap-3"><MapPin size={18} strokeWidth={1.5} className="mt-0.5 shrink-0" /><span>{BRAND.address.full}</span></li>
                             <li className="flex items-start gap-3"><Clock size={18} strokeWidth={1.5} className="mt-0.5 shrink-0" /><span>{BRAND.hours.map((h) => `${h.days} ${h.time}`).join(" · ")}</span></li>
                         </ul>
-                        <div className="mt-10 flex gap-4 flex-wrap">
+                        <div className="mt-10 flex gap-3 flex-wrap">
                             <Link to="/prenota" className="btn-outline-brand" style={{color: "#F5EFE2", borderColor: "rgba(245,239,226,0.5)"}}>Prenota</Link>
                             <a href={waLink()} target="_blank" rel="noreferrer" data-testid="contact-whatsapp" className="btn-accent">
                                 <MessageCircle size={18} /> WhatsApp
                             </a>
+                            {BRAND.links.instagram && (
+                                <a
+                                    href={BRAND.links.instagram}
+                                    target="_blank" rel="noreferrer"
+                                    data-testid="contact-instagram"
+                                    className="btn-outline-brand"
+                                    style={{color: "#F5EFE2", borderColor: "rgba(245,239,226,0.5)"}}
+                                >
+                                    <Instagram size={18} /> Instagram
+                                </a>
+                            )}
+                            <a
+                                href={BRAND.links.mapsDirections}
+                                target="_blank" rel="noreferrer"
+                                data-testid="contact-directions"
+                                className="btn-outline-brand"
+                                style={{color: "#F5EFE2", borderColor: "rgba(245,239,226,0.5)"}}
+                            >
+                                <Navigation size={18} /> Indicazioni
+                            </a>
                         </div>
                     </div>
-                    <img src={TAVOLO} alt="Tavolo apparecchiato con candela al Tierra" className="w-full aspect-[4/5] object-cover rounded-3xl" />
+
+                    {/* Interactive embedded map */}
+                    <div className="relative rounded-3xl overflow-hidden aspect-[4/5] shadow-2xl border-4 border-[#F5EFE2]/20">
+                        <iframe
+                            data-testid="contact-map"
+                            title={`Mappa ${BRAND.fullName} — ${BRAND.address.full}`}
+                            src={BRAND.links.mapsEmbed}
+                            className="absolute inset-0 w-full h-full"
+                            style={{ border: 0 }}
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                            allowFullScreen
+                        />
+                    </div>
                 </div>
             </section>
 
