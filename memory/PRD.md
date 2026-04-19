@@ -68,6 +68,17 @@ Endpoint `POST /api/webhooks/menu/availability` + `/bulk` — auth via `X-Webhoo
 - `POST /api/tables/{code}/close`: marca ordini completed + tavolo libero
 Reservations estese con `table_code` opzionale. Dual-print implementato in `escpos.py` via `encode_job(mode="kitchen+cashier")`: KITCHEN ticket (no prezzi, font XL, note in evidenza) + CASHIER ticket (full receipt con prezzi, "DA RISCUOTERE" per tavolo). Guida completa in `/app/memory/TIERRA_OS_TABLES_API.md`.
 
+### Reservations: slot + capacity + Tierra OS CRUD (added 2026-04-19)
+Capienza per fasce orarie: default 60 min slot, max 16 totali (interno 10 · esterno 6), configurabile via `/api/admin/slots/config`. Nuovi endpoint:
+- `GET /api/reservations/availability?date=&time=&guests=&zone=`: check live capienza, usato dal form /prenota
+- `POST /api/tierra/reservations` (X-Tierra-Token): crea auto-confermata + stampa immediata
+- `PATCH /api/tierra/reservations/{id}`: aggiorna, ricontrolla slot se cambia date/time/guests/zone
+- `DELETE /api/tierra/reservations/{id}`: soft-cancel, libera slot
+- `POST /api/reservations` (pubblico) ora valida capienza → 409 con `detail.availability` se saturo
+- `POST /api/admin/reservations/{id}/status?status=confirmed` ora ricontrolla capienza e accoda print job idempotentemente
+- Frontend `/prenota`: banner live verde/rosso con "Fascia 20:00-21:00 · 12/16 prenotati · 4 posti rimasti" + submit disabilitato se saturo
+Guida completa in `/app/memory/TIERRA_OS_RESERVATIONS_API.md`.
+
 ## Test Credentials
 In `/app/memory/test_credentials.md`
 

@@ -18,6 +18,8 @@ from models import (
     OrderCreate, Order, ReservationCreate, Reservation,
     CheckoutRequest, PaymentTransaction, AdminLogin, AdminToken,
     Table, TableUpdate,
+    SlotConfig, SlotConfigUpdate,
+    TierraReservationCreate, TierraReservationUpdate,
     _now_iso, _uuid,
 )
 from seed_data import CATEGORIES, ITEMS
@@ -87,6 +89,11 @@ async def seed_on_startup():
             await db.tables.insert_one(doc)
         await db.tables.create_index("code", unique=True)
         logger.info(f"Seeded {len(seed_tables)} tables (8 interni + 8 esterni).")
+    # Seed slot config singleton
+    sc = await db.slot_config.find_one({"id": "default"}, {"_id": 0})
+    if not sc:
+        await db.slot_config.insert_one(SlotConfig().model_dump())
+        logger.info("Seeded default slot config (60 min slots, 16 pax).")
     # Ensure customizations on Poke Bio & Secondo con contorno (idempotent by name match)
     await _ensure_customizations()
 
@@ -560,17 +567,147 @@ async def stripe_webhook(request: Request):
     return {"received": True}
 
 
+# ---------- Reservations: slot & capacity helpers ----------
+from datetime import datetime as _dt, timedelta as _td
+
+
+async def _get_slot_config() -> dict:
+    sc = await db.slot_config.find_one({"id": "default"}, {"_id": 0})
+    return sc or SlotConfig().model_dump()
+
+
+def _slot_start(time_str: str, slot_minutes: int) -> str:
+    """Given '12:45' and 60 → '12:00'; with 30 → '12:30'."""
+    h, m = time_str.split(":")
+    total = int(h) * 60 + int(m)
+    snapped = (total // slot_minutes) * slot_minutes
+    return f"{snapped // 60:02d}:{snapped % 60:02d}"
+
+
+def _slot_bounds(time_str: str, slot_minutes: int) -> tuple:
+    start = _slot_start(time_str, slot_minutes)
+    sh, sm = start.split(":")
+    start_total = int(sh) * 60 + int(sm)
+    end_total = start_total + slot_minutes
+    end = f"{(end_total // 60) % 24:02d}:{end_total % 60:02d}"
+    return start, end
+
+
+async def _slot_usage(date: str, time_str: str, slot_minutes: int,
+                      exclude_id: Optional[str] = None) -> dict:
+    """Return current guest count in the slot, split by zone."""
+    start, end = _slot_bounds(time_str, slot_minutes)
+    q: dict = {
+        "date": date,
+        "time": {"$gte": start, "$lt": end},
+        "status": {"$in": ["pending", "confirmed", "arrived"]},
+    }
+    if exclude_id:
+        q["id"] = {"$ne": exclude_id}
+    rows = await db.reservations.find(q, {"_id": 0, "guests": 1, "zone": 1}).to_list(500)
+    total = sum(r.get("guests", 0) for r in rows)
+    by_zone = {"interno": 0, "esterno": 0}
+    for r in rows:
+        z = r.get("zone")
+        if z in by_zone:
+            by_zone[z] += r.get("guests", 0)
+    return {"slot_start": start, "slot_end": end, "total": total, "by_zone": by_zone, "count": len(rows)}
+
+
+async def _check_capacity(date: str, time_str: str, guests: int,
+                          zone: Optional[str] = None,
+                          exclude_id: Optional[str] = None) -> dict:
+    """Raise 409 if slot is saturated. Return a dict with availability info."""
+    cfg = await _get_slot_config()
+    usage = await _slot_usage(date, time_str, cfg["slot_minutes"], exclude_id=exclude_id)
+    max_total = cfg["max_guests_per_slot"]
+    max_per_zone = cfg.get("max_per_zone") or {}
+
+    # Total check
+    remaining_total = max_total - usage["total"]
+    remaining_by_zone = {z: (max_per_zone.get(z, max_total) - usage["by_zone"].get(z, 0)) for z in ("interno", "esterno")}
+    info = {
+        "slot_start": usage["slot_start"],
+        "slot_end": usage["slot_end"],
+        "booked_total": usage["total"],
+        "booked_by_zone": usage["by_zone"],
+        "max_total": max_total,
+        "max_by_zone": max_per_zone,
+        "remaining_total": remaining_total,
+        "remaining_by_zone": remaining_by_zone,
+        "saturated": remaining_total <= 0,
+    }
+
+    if remaining_total < guests:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    f"Fascia oraria {usage['slot_start']}-{usage['slot_end']} satura: "
+                    f"{usage['total']}/{max_total} coperti già prenotati. "
+                    f"Rimangono {max(0, remaining_total)} posti."
+                ),
+                "availability": info,
+            },
+        )
+    if zone and zone in max_per_zone:
+        zone_remaining = max_per_zone[zone] - usage["by_zone"].get(zone, 0)
+        if zone_remaining < guests:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": (
+                        f"Zona '{zone}' satura nella fascia {usage['slot_start']}-{usage['slot_end']}: "
+                        f"{usage['by_zone'].get(zone,0)}/{max_per_zone[zone]} già prenotati."
+                    ),
+                    "availability": info,
+                },
+            )
+    return info
+
+
 # ---------- Reservations ----------
+@api.get("/reservations/availability")
+async def reservations_availability(date: str, time: str, guests: int = 1, zone: Optional[str] = None):
+    """
+    Public availability check. Returns saturation info for the given slot.
+    Used by Tierra OS / website form to warn BEFORE attempting to submit.
+    """
+    cfg = await _get_slot_config()
+    usage = await _slot_usage(date, time, cfg["slot_minutes"])
+    max_total = cfg["max_guests_per_slot"]
+    max_per_zone = cfg.get("max_per_zone") or {}
+    remaining_total = max_total - usage["total"]
+    remaining_by_zone = {z: (max_per_zone.get(z, max_total) - usage["by_zone"].get(z, 0)) for z in ("interno", "esterno")}
+    can_fit = remaining_total >= guests and (not zone or remaining_by_zone.get(zone, max_total) >= guests)
+    return {
+        "date": date,
+        "slot_start": usage["slot_start"],
+        "slot_end": usage["slot_end"],
+        "slot_minutes": cfg["slot_minutes"],
+        "booked_total": usage["total"],
+        "booked_by_zone": usage["by_zone"],
+        "max_total": max_total,
+        "max_by_zone": max_per_zone,
+        "remaining_total": max(0, remaining_total),
+        "remaining_by_zone": {k: max(0, v) for k, v in remaining_by_zone.items()},
+        "saturated": remaining_total <= 0,
+        "can_fit": bool(can_fit),
+    }
+
+
 @api.post("/reservations", response_model=Reservation)
 async def create_reservation(payload: ReservationCreate):
     """Customer-facing endpoint: create a reservation in PENDING status.
 
+    Raises 409 if the slot is already saturated.
     No email + no print is triggered until admin explicitly confirms via
     POST /admin/reservations/{id}/status?status=confirmed.
     """
     if payload.guests < 1 or payload.guests > 20:
         raise HTTPException(status_code=400, detail="Numero ospiti non valido (1-20)")
-    res = Reservation(**payload.model_dump())  # status defaults to "pending"
+    await _check_capacity(payload.date, payload.time, payload.guests, zone=payload.zone)
+    res = Reservation(**payload.model_dump(), source="website")
     await db.reservations.insert_one(res.model_dump())
     logger.info("Reservation %s created (pending) for %s guests on %s %s",
                 res.id, res.guests, res.date, res.time)
@@ -598,6 +735,14 @@ async def admin_set_res_status(
     if not existing:
         raise HTTPException(status_code=404, detail="Prenotazione non trovata")
     previous_status = existing.get("status")
+
+    # On confirmation from a non-confirmed state, re-check capacity
+    if status == "confirmed" and previous_status != "confirmed":
+        await _check_capacity(
+            existing["date"], existing["time"], existing["guests"],
+            zone=existing.get("zone"), exclude_id=res_id,
+        )
+
     await db.reservations.update_one(
         {"id": res_id},
         {"$set": {"status": status, "status_updated_at": _now_iso()}},
@@ -606,16 +751,9 @@ async def admin_set_res_status(
 
     # Confirmation side-effects: email + print (only on transition INTO "confirmed")
     if status == "confirmed" and previous_status != "confirmed":
-        background.add_task(send_reservation_confirmation, existing)
-        # Queue the reservation print job (distinct from order print jobs)
-        job = {
-            "id": _uuid(),
-            "reservation_id": res_id,
-            "job_type": "reservation",
-            "status": "queued",
-            "created_at": _now_iso(),
-        }
-        await db.print_queue.insert_one(job)
+        if existing.get("customer_email"):
+            background.add_task(send_reservation_confirmation, existing)
+        await _queue_reservation_print(res_id)
         logger.info("Reservation %s confirmed → email + print queued", res_id)
 
     return {"ok": True, "status": status}
@@ -991,6 +1129,133 @@ async def close_table(
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"Tavolo {code} non trovato")
     return {"ok": True, "code": code.upper()}
+
+
+# ---------- Tierra OS reservations ----------
+async def _queue_reservation_print(res_id: str):
+    """Idempotent: only queue if not already queued for this reservation."""
+    existing = await db.print_queue.find_one(
+        {"reservation_id": res_id, "status": {"$in": ["queued", "printed"]}},
+        {"_id": 0},
+    )
+    if existing:
+        return
+    job = {
+        "id": _uuid(),
+        "reservation_id": res_id,
+        "job_type": "reservation",
+        "status": "queued",
+        "created_at": _now_iso(),
+    }
+    await db.print_queue.insert_one(job)
+
+
+@api.post("/tierra/reservations", response_model=Reservation)
+async def tierra_create_reservation(
+    payload: TierraReservationCreate,
+    background: BackgroundTasks,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Tierra OS endpoint: create a reservation (auto-confirmed + auto-printed by default).
+
+    Raises 409 if the slot is saturated.
+    """
+    if payload.guests < 1 or payload.guests > 20:
+        raise HTTPException(status_code=400, detail="Numero ospiti non valido (1-20)")
+    await _check_capacity(payload.date, payload.time, payload.guests, zone=payload.zone)
+
+    data = payload.model_dump()
+    # Remove auto_print from reservation doc (it's a control flag)
+    auto_print = data.pop("auto_print", True)
+    # Map zone correctly — Reservation schema also supports zone
+    res = Reservation(**data, source="tierra_os")
+    await db.reservations.insert_one(res.model_dump())
+
+    # If confirmed → email + print
+    if res.status == "confirmed":
+        if res.customer_email:
+            background.add_task(send_reservation_confirmation, res.model_dump())
+        if auto_print:
+            await _queue_reservation_print(res.id)
+    logger.info("Tierra OS reservation %s created status=%s", res.id, res.status)
+    return res
+
+
+@api.patch("/tierra/reservations/{res_id}", response_model=Reservation)
+async def tierra_update_reservation(
+    res_id: str,
+    payload: TierraReservationUpdate,
+    background: BackgroundTasks,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Tierra OS endpoint: update an existing reservation (incl. status).
+
+    Capacity is re-checked if date/time/guests/zone change.
+    Transition TO confirmed triggers email + print job (idempotent).
+    """
+    existing = await db.reservations.find_one({"id": res_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Prenotazione non trovata")
+
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+
+    # Capacity recheck if relevant fields change
+    new_date = updates.get("date", existing["date"])
+    new_time = updates.get("time", existing["time"])
+    new_guests = updates.get("guests", existing["guests"])
+    new_zone = updates.get("zone", existing.get("zone"))
+    # Only check if status not cancelled and not no_show
+    new_status = updates.get("status", existing.get("status"))
+    if new_status not in ("cancelled", "no_show"):
+        await _check_capacity(new_date, new_time, new_guests, zone=new_zone, exclude_id=res_id)
+
+    previous_status = existing.get("status")
+    updates["status_updated_at"] = _now_iso()
+    await db.reservations.update_one({"id": res_id}, {"$set": updates})
+    merged = {**existing, **updates}
+
+    # Transition-to-confirmed side effects
+    if new_status == "confirmed" and previous_status != "confirmed":
+        if merged.get("customer_email"):
+            background.add_task(send_reservation_confirmation, merged)
+        await _queue_reservation_print(res_id)
+        logger.info("Tierra OS reservation %s → confirmed (email+print queued)", res_id)
+
+    return Reservation(**merged)
+
+
+@api.delete("/tierra/reservations/{res_id}")
+async def tierra_cancel_reservation(
+    res_id: str,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Soft-delete: mark as cancelled (frees the slot)."""
+    res = await db.reservations.update_one(
+        {"id": res_id}, {"$set": {"status": "cancelled", "status_updated_at": _now_iso()}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Prenotazione non trovata")
+    return {"ok": True, "id": res_id, "status": "cancelled"}
+
+
+# ---------- Admin slot config ----------
+@api.get("/admin/slots/config", response_model=SlotConfig)
+async def admin_get_slot_config(_: str = Depends(require_admin)):
+    sc = await db.slot_config.find_one({"id": "default"}, {"_id": 0})
+    return sc or SlotConfig().model_dump()
+
+
+@api.put("/admin/slots/config", response_model=SlotConfig)
+async def admin_update_slot_config(payload: SlotConfigUpdate, _: str = Depends(require_admin)):
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+    updates["updated_at"] = _now_iso()
+    await db.slot_config.update_one({"id": "default"}, {"$set": updates}, upsert=True)
+    sc = await db.slot_config.find_one({"id": "default"}, {"_id": 0})
+    return sc
 
 
 # ---------- Webhooks (external systems e.g. Tierra OS / Lark Base) ----------

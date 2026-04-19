@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Calendar as CalendarIcon, Users, Clock } from "lucide-react";
+import { Calendar as CalendarIcon, Users, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Calendar } from "../components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "../components/ui/popover";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../components/ui/select";
@@ -20,8 +20,27 @@ const ReservationsPage = () => {
     });
     const [submitting, setSubmitting] = useState(false);
     const [success, setSuccess] = useState(null);
+    const [availability, setAvailability] = useState(null);
+    const [checkingAvail, setCheckingAvail] = useState(false);
 
     const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+    // Live check availability when date+time+guests are all filled
+    useEffect(() => {
+        const { date, time, guests } = form;
+        if (!date || !time || !guests) {
+            setAvailability(null);
+            return;
+        }
+        setCheckingAvail(true);
+        const dateStr = format(date, "yyyy-MM-dd");
+        const controller = new AbortController();
+        api.get(`/reservations/availability?date=${dateStr}&time=${time}&guests=${guests}`, { signal: controller.signal })
+            .then((r) => setAvailability(r.data))
+            .catch(() => setAvailability(null))
+            .finally(() => setCheckingAvail(false));
+        return () => controller.abort();
+    }, [form.date, form.time, form.guests]);
 
     const submit = async (e) => {
         e.preventDefault();
@@ -29,6 +48,9 @@ const ReservationsPage = () => {
             return toast.error("Compila nome, telefono ed email");
         if (!form.date) return toast.error("Seleziona una data");
         if (!form.time) return toast.error("Seleziona un orario");
+        if (availability && !availability.can_fit) {
+            return toast.error("Fascia oraria satura — scegli un altro orario");
+        }
 
         setSubmitting(true);
         try {
@@ -45,7 +67,9 @@ const ReservationsPage = () => {
             setSuccess(data);
             toast.success("Richiesta ricevuta — ti confermeremo a breve");
         } catch (err) {
-            toast.error(err?.response?.data?.detail || "Errore nella prenotazione");
+            const detail = err?.response?.data?.detail;
+            const msg = typeof detail === "string" ? detail : (detail?.message || "Errore nella prenotazione");
+            toast.error(msg);
         } finally {
             setSubmitting(false);
         }
@@ -147,7 +171,34 @@ const ReservationsPage = () => {
                         <textarea data-testid="res-notes" value={form.notes} onChange={(e) => update("notes", e.target.value)} rows={3} className="w-full rounded-xl bg-[#F9F6F0] border-transparent focus:border-[#2B4A33] focus:ring-1 focus:ring-[#2B4A33] px-4 py-3 text-sm outline-none" />
                     </div>
 
-                    <button data-testid="submit-reservation-btn" disabled={submitting} className="btn-brand w-full justify-center disabled:opacity-60">
+                    {/* Live availability feedback */}
+                    {availability && !checkingAvail && (
+                        <div
+                            data-testid="res-availability-banner"
+                            className={`rounded-xl px-4 py-3 border flex items-start gap-3 text-sm ${
+                                availability.can_fit
+                                    ? "bg-[#7C9A4A]/10 border-[#7C9A4A]/30 text-[#3E5822]"
+                                    : "bg-[#923F28]/10 border-[#923F28]/30 text-[#923F28]"
+                            }`}
+                        >
+                            {availability.can_fit
+                                ? <CheckCircle2 size={18} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+                                : <AlertTriangle size={18} strokeWidth={1.5} className="mt-0.5 shrink-0" />}
+                            <div className="flex-1">
+                                <p className="font-medium">
+                                    Fascia {availability.slot_start}–{availability.slot_end} · {availability.can_fit ? "Disponibile" : "Satura"}
+                                </p>
+                                <p className="mt-0.5 text-xs opacity-80">
+                                    {availability.booked_total}/{availability.max_total} coperti prenotati
+                                    {availability.remaining_total > 0
+                                        ? ` · restano ${availability.remaining_total} posti`
+                                        : " · prova un'altra fascia oraria"}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    <button data-testid="submit-reservation-btn" disabled={submitting || (availability && !availability.can_fit)} className="btn-brand w-full justify-center disabled:opacity-60">
                         {submitting ? "Invio in corso..." : "Invia richiesta"}
                     </button>
                 </div>

@@ -175,6 +175,7 @@ class ReservationCreate(BaseModel):
     guests: int
     notes: Optional[str] = None
     table_code: Optional[str] = None  # optional pre-assigned table
+    zone: Optional[str] = None        # "interno" / "esterno" preferred zone
 
 
 class Reservation(BaseModel):
@@ -182,7 +183,7 @@ class Reservation(BaseModel):
     id: str = Field(default_factory=_uuid)
     customer_name: str
     customer_phone: str
-    customer_email: EmailStr
+    customer_email: Optional[EmailStr] = None
     date: str
     time: str
     guests: int
@@ -190,6 +191,8 @@ class Reservation(BaseModel):
     status: str = "pending"  # pending | confirmed | arrived | cancelled | no_show
     created_at: str = Field(default_factory=_now_iso)
     table_code: Optional[str] = None
+    zone: Optional[str] = None
+    source: str = "website"  # website | tierra_os | admin
 
 
 # ---------- Tables ----------
@@ -216,6 +219,53 @@ class TableUpdate(BaseModel):
     merged_with: Optional[List[str]] = None
     capacity: Optional[int] = None
     label: Optional[str] = None
+
+
+# ---------- Slot / Capacity config ----------
+class SlotConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = "default"
+    slot_minutes: int = 60              # slot granularity
+    max_guests_per_slot: int = 16       # total capacity (interno+esterno)
+    max_per_zone: dict = Field(default_factory=lambda: {"interno": 10, "esterno": 6})
+    # Optional: different rules per day of week (0=Mon ... 6=Sun)
+    day_overrides: dict = Field(default_factory=dict)
+    updated_at: str = Field(default_factory=_now_iso)
+
+
+class SlotConfigUpdate(BaseModel):
+    slot_minutes: Optional[int] = None
+    max_guests_per_slot: Optional[int] = None
+    max_per_zone: Optional[dict] = None
+    day_overrides: Optional[dict] = None
+
+
+# ---------- Tierra OS reservation payloads ----------
+class TierraReservationCreate(BaseModel):
+    customer_name: str
+    customer_phone: str
+    customer_email: Optional[EmailStr] = None
+    date: str
+    time: str
+    guests: int
+    notes: Optional[str] = None
+    table_code: Optional[str] = None
+    zone: Optional[TableZone] = None  # interno/esterno (optional, for capacity check)
+    status: str = "confirmed"         # OS-created are auto-confirmed by default
+    auto_print: bool = True
+
+
+class TierraReservationUpdate(BaseModel):
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_email: Optional[EmailStr] = None
+    date: Optional[str] = None
+    time: Optional[str] = None
+    guests: Optional[int] = None
+    notes: Optional[str] = None
+    table_code: Optional[str] = None
+    zone: Optional[TableZone] = None
+    status: Optional[str] = None
 
 
 # ---------- Payments ----------
