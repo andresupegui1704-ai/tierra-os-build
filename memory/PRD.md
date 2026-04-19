@@ -56,6 +56,9 @@ Checkbox discreto nel Checkout: "Voglio ricevere offerte, menù del giorno e nov
 Endpoint `GET /api/admin/stats/sales?start=&end=` — aggrega quantità e ricavato per piatto sugli ordini con `payment_status=paid`. Ritorna totali (orders, revenue, avg_ticket) + array items ordinato per quantità desc.
 Endpoint `GET /api/admin/marketing/subscribers` + `DELETE /api/admin/marketing/subscribers/{email}`.
 
+### Webhook integration (Tierra OS ↔ Lark Base, added 2026-04-19)
+Endpoint `POST /api/webhooks/menu/availability` + `/bulk` — auth via `X-Webhook-Token` header (env `WEBHOOK_SECRET`). Accetta match by `item_id` o `item_name` (case-insensitive). Frontend menu page polla ogni 20s quando la tab è attiva → latenza end-to-end ~25-30s max. Guida completa in `/app/memory/TIERRA_OS_INTEGRATION.md`.
+
 ## Test Credentials
 In `/app/memory/test_credentials.md`
 

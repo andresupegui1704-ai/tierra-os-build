@@ -11,6 +11,7 @@ const MenuPage = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Initial fetch
         Promise.all([api.get("/menu/categories"), api.get("/menu/items")])
             .then(([c, i]) => {
                 setCategories(c.data);
@@ -18,6 +19,18 @@ const MenuPage = () => {
                 setActive(c.data[0]?.slug || null);
             })
             .finally(() => setLoading(false));
+
+        // Near real-time polling: re-fetch items every 20s so that
+        // availability updates from Tierra OS / Lark Base appear without refresh.
+        // Skipped when tab is hidden to save bandwidth.
+        const interval = setInterval(() => {
+            if (document.hidden) return;
+            api.get("/menu/items")
+                .then((r) => setItems(r.data))
+                .catch(() => { /* silent */ });
+        }, 20000);
+
+        return () => clearInterval(interval);
     }, []);
 
     const activeCategory = categories.find((c) => c.slug === active);

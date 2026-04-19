@@ -8,6 +8,7 @@ from pathlib import Path
 import os
 import logging
 import asyncio
+import re
 import uuid
 from typing import List, Optional
 
@@ -794,6 +795,139 @@ async def admin_marketing_unsubscribe(email: str, _: str = Depends(require_admin
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Iscritto non trovato")
     return {"ok": True}
+
+
+# ---------- Webhooks (external systems e.g. Tierra OS / Lark Base) ----------
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
+
+
+def _require_webhook(x_webhook_token: str = Header(default="")) -> bool:
+    if not WEBHOOK_SECRET:
+        raise HTTPException(status_code=500, detail="Webhook secret not configured")
+    if x_webhook_token != WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid webhook token")
+    return True
+
+
+@api.post("/webhooks/menu/availability")
+async def webhook_set_availability(
+    payload: dict,
+    _: bool = Depends(_require_webhook),
+):
+    """
+    Update a single menu item's availability by id or by name (case-insensitive match).
+
+    Body (JSON):
+    {
+        "item_id": "uuid",           // optional
+        "item_name": "Avocado Toast", // optional (used if item_id missing)
+        "available": true,           // required
+        "source": "tierra-os"        // optional, for logs
+    }
+
+    Returns: { ok, item_id, name, available, matched_by }
+    """
+    if "available" not in payload:
+        raise HTTPException(status_code=400, detail="Field 'available' is required")
+    available = bool(payload["available"])
+    item_id = payload.get("item_id")
+    item_name = payload.get("item_name") or payload.get("name")
+
+    query = None
+    matched_by = None
+    if item_id:
+        query = {"id": str(item_id)}
+        matched_by = "id"
+    elif item_name:
+        # Case-insensitive exact match on name
+        query = {"name": {"$regex": f"^{re.escape(str(item_name))}$", "$options": "i"}}
+        matched_by = "name"
+    else:
+        raise HTTPException(status_code=400, detail="Provide either 'item_id' or 'item_name'")
+
+    result = await db.menu_items.find_one_and_update(
+        query,
+        {"$set": {"available": available}},
+        projection={"_id": 0},
+        return_document=True,
+    ) if hasattr(db.menu_items, "find_one_and_update") else None
+
+    # Motor supports find_one_and_update; fallback for safety
+    if result is None:
+        # Try update_one + find_one (defensive)
+        upd = await db.menu_items.update_one(query, {"$set": {"available": available}})
+        if upd.matched_count == 0:
+            raise HTTPException(status_code=404, detail=f"Piatto non trovato ({matched_by}={item_id or item_name})")
+        result = await db.menu_items.find_one(query, {"_id": 0})
+
+    logger.info(
+        "Webhook availability update — source=%s matched_by=%s item=%s → available=%s",
+        payload.get("source", "unknown"), matched_by, result.get("name"), available,
+    )
+    return {
+        "ok": True,
+        "item_id": result.get("id"),
+        "name": result.get("name"),
+        "available": result.get("available"),
+        "matched_by": matched_by,
+    }
+
+
+@api.post("/webhooks/menu/availability/bulk")
+async def webhook_set_availability_bulk(
+    payload: dict,
+    _: bool = Depends(_require_webhook),
+):
+    """
+    Bulk update availability for multiple items.
+
+    Body:
+    {
+        "items": [
+            {"item_name": "Avocado Toast", "available": true},
+            {"item_id": "uuid", "available": false}
+        ],
+        "source": "tierra-os"
+    }
+
+    Returns: { ok, updated: int, not_found: [name|id...], results: [...] }
+    """
+    items = payload.get("items") or []
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="Field 'items' must be a non-empty array")
+
+    updated = 0
+    not_found: list = []
+    results: list = []
+    for it in items:
+        if "available" not in it:
+            continue
+        available = bool(it["available"])
+        item_id = it.get("item_id")
+        item_name = it.get("item_name") or it.get("name")
+        if item_id:
+            query = {"id": str(item_id)}
+            ref = item_id
+        elif item_name:
+            query = {"name": {"$regex": f"^{re.escape(str(item_name))}$", "$options": "i"}}
+            ref = item_name
+        else:
+            continue
+
+        upd = await db.menu_items.update_one(query, {"$set": {"available": available}})
+        if upd.matched_count == 0:
+            not_found.append(ref)
+            continue
+        updated += 1
+        doc = await db.menu_items.find_one(query, {"_id": 0, "id": 1, "name": 1, "available": 1})
+        if doc:
+            results.append(doc)
+
+    logger.info(
+        "Webhook bulk availability — source=%s updated=%s not_found=%s",
+        payload.get("source", "unknown"), updated, not_found,
+    )
+    return {"ok": True, "updated": updated, "not_found": not_found, "results": results}
 
 
 # Include + CORS
