@@ -106,7 +106,7 @@ class MenuItemCreate(BaseModel):
 
 
 # ---------- Orders ----------
-ServiceType = Literal["delivery", "asporto", "preordine"]
+ServiceType = Literal["delivery", "asporto", "preordine", "tavolo"]
 
 
 class OrderLineItemSelection(BaseModel):
@@ -130,12 +130,15 @@ class OrderCreate(BaseModel):
     items: List[OrderLineItem]
     customer_name: str
     customer_phone: str
-    customer_email: EmailStr
-    delivery_address: Optional[str] = None  # required if delivery
-    scheduled_time: Optional[str] = None  # ISO string for pickup/delivery
+    customer_email: Optional[EmailStr] = None  # optional for dine-in ("tavolo")
+    delivery_address: Optional[str] = None
+    scheduled_time: Optional[str] = None
     notes: Optional[str] = None
-    origin_url: str
-    marketing_consent: bool = False  # GDPR opt-in for WhatsApp/email offers
+    origin_url: str = ""
+    marketing_consent: bool = False
+    # Dine-in
+    table_code: Optional[str] = None  # e.g. "E1", "I3"
+    waiter: Optional[str] = None      # waiter name / id
 
 
 class Order(BaseModel):
@@ -145,18 +148,21 @@ class Order(BaseModel):
     items: List[OrderLineItem]
     customer_name: str
     customer_phone: str
-    customer_email: EmailStr
+    customer_email: Optional[EmailStr] = None
     delivery_address: Optional[str] = None
     scheduled_time: Optional[str] = None
     notes: Optional[str] = None
     subtotal: float
     total: float
-    status: str = "pending_payment"  # pending_payment | paid | cancelled | preparing | ready | completed
-    payment_status: str = "initiated"  # initiated | paid | failed | expired
+    status: str = "pending_payment"
+    payment_status: str = "initiated"
     stripe_session_id: Optional[str] = None
     created_at: str = Field(default_factory=_now_iso)
     marketing_consent: bool = False
     consent_date: Optional[str] = None
+    # Dine-in
+    table_code: Optional[str] = None
+    waiter: Optional[str] = None
 
 
 # ---------- Reservations ----------
@@ -168,6 +174,7 @@ class ReservationCreate(BaseModel):
     time: str  # HH:MM
     guests: int
     notes: Optional[str] = None
+    table_code: Optional[str] = None  # optional pre-assigned table
 
 
 class Reservation(BaseModel):
@@ -180,8 +187,35 @@ class Reservation(BaseModel):
     time: str
     guests: int
     notes: Optional[str] = None
-    status: str = "pending"  # pending | confirmed | cancelled
+    status: str = "pending"  # pending | confirmed | arrived | cancelled | no_show
     created_at: str = Field(default_factory=_now_iso)
+    table_code: Optional[str] = None
+
+
+# ---------- Tables ----------
+TableZone = Literal["interno", "esterno"]
+TableStatus = Literal["libero", "confermato", "arrivato", "accorpato", "cancellato", "occupato"]
+
+
+class Table(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=_uuid)
+    code: str                 # Unique code, e.g. "I1", "E3"
+    label: Optional[str] = None
+    zone: TableZone
+    capacity: int = 2
+    position: Optional[dict] = None  # {"row": int, "col": int} (optional layout hint)
+    status: TableStatus = "libero"
+    merged_with: List[str] = Field(default_factory=list)  # for "accorpato"
+    order: int = 0
+    updated_at: str = Field(default_factory=_now_iso)
+
+
+class TableUpdate(BaseModel):
+    status: Optional[TableStatus] = None
+    merged_with: Optional[List[str]] = None
+    capacity: Optional[int] = None
+    label: Optional[str] = None
 
 
 # ---------- Payments ----------

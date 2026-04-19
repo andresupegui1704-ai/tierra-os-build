@@ -57,7 +57,16 @@ Endpoint `GET /api/admin/stats/sales?start=&end=` — aggrega quantità e ricava
 Endpoint `GET /api/admin/marketing/subscribers` + `DELETE /api/admin/marketing/subscribers/{email}`.
 
 ### Webhook integration (Tierra OS ↔ Lark Base, added 2026-04-19)
-Endpoint `POST /api/webhooks/menu/availability` + `/bulk` — auth via `X-Webhook-Token` header (env `WEBHOOK_SECRET`). Accetta match by `item_id` o `item_name` (case-insensitive). Frontend menu page polla ogni 20s quando la tab è attiva → latenza end-to-end ~25-30s max. Guida completa in `/app/memory/TIERRA_OS_INTEGRATION.md`.
+Endpoint `POST /api/webhooks/menu/availability` + `/bulk` — auth via `X-Webhook-Token` header (env `WEBHOOK_SECRET`). Endpoint alternativo `PATCH /api/menu/availability` auth via `X-Tierra-Token` (env `TIERRA_TOKEN`, default `tierra2024`). Accetta match by `item_id` o `item_name` (case-insensitive). Frontend menu page polla ogni 20s quando la tab è attiva → latenza end-to-end ~25-30s max. Guida completa in `/app/memory/TIERRA_OS_INTEGRATION.md`.
+
+### Tables / Dine-in orders (added 2026-04-19)
+16 tavoli seedati automaticamente (I1-I8 interni + E1-E8 esterni, 2 coperti ciascuno) matching Tierra OS `tierra-mappa-v5`. Endpoints:
+- `GET /api/tables` (public): lista tavoli con prenotazioni di oggi collegate
+- `PATCH /api/tables/{code}`: cambia status (libero/confermato/arrivato/accorpato/cancellato/occupato), merged_with, capacity
+- `POST /api/orders` con `service_type: "tavolo"`: skip Stripe, auto-queue print
+- `GET /api/tables/{code}/orders`: ordini aperti del tavolo
+- `POST /api/tables/{code}/close`: marca ordini completed + tavolo libero
+Reservations estese con `table_code` opzionale. Dual-print implementato in `escpos.py` via `encode_job(mode="kitchen+cashier")`: KITCHEN ticket (no prezzi, font XL, note in evidenza) + CASHIER ticket (full receipt con prezzi, "DA RISCUOTERE" per tavolo). Guida completa in `/app/memory/TIERRA_OS_TABLES_API.md`.
 
 ## Test Credentials
 In `/app/memory/test_credentials.md`

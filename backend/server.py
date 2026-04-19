@@ -17,7 +17,8 @@ from models import (
     MenuItem, MenuItemCreate, MenuItemUpdate, CustomizationGroup,
     OrderCreate, Order, ReservationCreate, Reservation,
     CheckoutRequest, PaymentTransaction, AdminLogin, AdminToken,
-    _now_iso,
+    Table, TableUpdate,
+    _now_iso, _uuid,
 )
 from seed_data import CATEGORIES, ITEMS
 from customizations import bowl_groups, secondo_groups, CUSTOMIZATION_VERSION
@@ -67,6 +68,25 @@ async def seed_on_startup():
             doc = MenuItem(**it).model_dump()
             await db.menu_items.insert_one(doc)
         logger.info(f"Seeded {len(ITEMS)} menu items.")
+    # Seed tables (16 tables matching Tierra OS layout: I1-I8 interni, E1-E8 esterni)
+    tables_count = await db.tables.count_documents({})
+    if tables_count == 0:
+        seed_tables = []
+        # Interno: 8 tavoli da 2 coperti (I1-I8)
+        for i in range(1, 9):
+            seed_tables.append({
+                "code": f"I{i}", "zone": "interno", "capacity": 2, "order": i,
+            })
+        # Esterno: 8 tavoli da 2 coperti (E1-E8)
+        for i in range(1, 9):
+            seed_tables.append({
+                "code": f"E{i}", "zone": "esterno", "capacity": 2, "order": i,
+            })
+        for t in seed_tables:
+            doc = Table(**t).model_dump()
+            await db.tables.insert_one(doc)
+        await db.tables.create_index("code", unique=True)
+        logger.info(f"Seeded {len(seed_tables)} tables (8 interni + 8 esterni).")
     # Ensure customizations on Poke Bio & Secondo con contorno (idempotent by name match)
     await _ensure_customizations()
 
@@ -318,10 +338,16 @@ async def create_order(payload: OrderCreate, request: Request):
 
     if payload.service_type == "delivery" and not payload.delivery_address:
         raise HTTPException(status_code=400, detail="Indirizzo di consegna obbligatorio per il delivery")
+    if payload.service_type == "tavolo" and not payload.table_code:
+        raise HTTPException(status_code=400, detail="Codice tavolo obbligatorio per ordini al tavolo")
 
     # Delivery fee (simple, server-side)
     delivery_fee = 3.50 if payload.service_type == "delivery" else 0.0
     total = round(subtotal + delivery_fee, 2)
+
+    # Dine-in: no online payment required
+    payment_status = "not_required" if payload.service_type == "tavolo" else "initiated"
+    order_status = "open" if payload.service_type == "tavolo" else "pending_payment"
 
     order = Order(
         service_type=payload.service_type,
@@ -334,13 +360,28 @@ async def create_order(payload: OrderCreate, request: Request):
         notes=payload.notes,
         subtotal=round(subtotal, 2),
         total=total,
+        status=order_status,
+        payment_status=payment_status,
         marketing_consent=bool(payload.marketing_consent),
         consent_date=_now_iso() if payload.marketing_consent else None,
+        table_code=payload.table_code,
+        waiter=payload.waiter,
     )
     await db.orders.insert_one(order.model_dump())
 
+    # Dine-in: automatically queue a print job (no Stripe flow)
+    if payload.service_type == "tavolo":
+        job = {
+            "id": _uuid(),
+            "order_id": order.id,
+            "status": "queued",
+            "created_at": _now_iso(),
+        }
+        await db.print_queue.insert_one(job)
+        logger.info("Dine-in order %s for table %s queued for print", order.id, payload.table_code)
+
     # Upsert marketing subscriber if opted-in
-    if payload.marketing_consent:
+    if payload.marketing_consent and payload.customer_email:
         await db.marketing_subscribers.update_one(
             {"email": payload.customer_email.lower()},
             {
@@ -657,7 +698,7 @@ async def print_pending(_: bool = Depends(_require_print_agent), limit: int = 10
             "job_id": j["id"],
             "order_id": j["order_id"],
             "created_at": j["created_at"],
-            "escpos_base64": escpos.encode_job(order),
+            "escpos_base64": escpos.encode_job(order, mode="kitchen+cashier"),
         })
     return {"jobs": output}
 
@@ -797,7 +838,7 @@ async def admin_marketing_unsubscribe(email: str, _: str = Depends(require_admin
     return {"ok": True}
 
 
-# ---------- Webhooks (external systems e.g. Tierra OS / Lark Base) ----------
+# ---------- Auth helpers for external systems ----------
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 TIERRA_TOKEN = os.environ.get("TIERRA_TOKEN", "tierra2024")
 
@@ -816,6 +857,95 @@ def _require_tierra_token(x_tierra_token: str = Header(default="")) -> bool:
     return True
 
 
+# ---------- Tables (dining room) ----------
+@api.get("/tables")
+async def list_tables(zone: Optional[str] = None, include_reservations: bool = True):
+    """
+    Public read-only endpoint. Returns all tables, optionally filtered by zone.
+    If include_reservations=True (default), also enriches each table with
+    today's reservation (if any).
+    """
+    query: dict = {}
+    if zone in ("interno", "esterno"):
+        query["zone"] = zone
+    tables = await db.tables.find(query, {"_id": 0}).sort([("zone", 1), ("order", 1)]).to_list(500)
+
+    if include_reservations:
+        from datetime import date as _date
+        today_iso = _date.today().isoformat()
+        reservations = await db.reservations.find(
+            {"date": today_iso, "table_code": {"$ne": None}, "status": {"$in": ["pending", "confirmed", "arrived"]}},
+            {"_id": 0},
+        ).to_list(500)
+        by_table: dict = {}
+        for r in reservations:
+            by_table.setdefault(r["table_code"], []).append(r)
+        for t in tables:
+            t["reservations_today"] = by_table.get(t["code"], [])
+
+    return tables
+
+
+@api.get("/tables/{code}")
+async def get_table(code: str):
+    t = await db.tables.find_one({"code": code.upper()}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail=f"Tavolo {code} non trovato")
+    return t
+
+
+@api.patch("/tables/{code}")
+async def update_table(
+    code: str,
+    payload: TableUpdate,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Update table state. Requires header X-Tierra-Token."""
+    updates: dict = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+    updates["updated_at"] = _now_iso()
+    res = await db.tables.update_one({"code": code.upper()}, {"$set": updates})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Tavolo {code} non trovato")
+    doc = await db.tables.find_one({"code": code.upper()}, {"_id": 0})
+    logger.info("Table %s updated → %s", code, updates)
+    return doc
+
+
+@api.get("/tables/{code}/orders")
+async def list_table_orders(code: str, open_only: bool = True):
+    """Return orders for a given table. By default only open (not paid/completed)."""
+    q: dict = {"table_code": code.upper()}
+    if open_only:
+        q["status"] = {"$in": ["open", "preparing", "ready"]}
+    rows = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return rows
+
+
+@api.post("/tables/{code}/close")
+async def close_table(
+    code: str,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Mark table as libero + mark open orders as completed. Used when bill is paid."""
+    now = _now_iso()
+    await db.orders.update_many(
+        {"table_code": code.upper(), "status": {"$in": ["open", "preparing", "ready"]}},
+        {"$set": {"status": "completed", "payment_status": "paid", "closed_at": now}},
+    )
+    res = await db.tables.update_one(
+        {"code": code.upper()}, {"$set": {"status": "libero", "merged_with": [], "updated_at": now}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Tavolo {code} non trovato")
+    return {"ok": True, "code": code.upper()}
+
+
+# ---------- Webhooks (external systems e.g. Tierra OS / Lark Base) ----------
+
+
+# ---------- Webhooks (external systems e.g. Tierra OS / Lark Base) ----------
 @api.patch("/menu/availability")
 async def patch_menu_availability(
     payload: dict,
