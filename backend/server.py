@@ -799,6 +799,7 @@ async def admin_marketing_unsubscribe(email: str, _: str = Depends(require_admin
 
 # ---------- Webhooks (external systems e.g. Tierra OS / Lark Base) ----------
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
+TIERRA_TOKEN = os.environ.get("TIERRA_TOKEN", "tierra2024")
 
 
 def _require_webhook(x_webhook_token: str = Header(default="")) -> bool:
@@ -807,6 +808,73 @@ def _require_webhook(x_webhook_token: str = Header(default="")) -> bool:
     if x_webhook_token != WEBHOOK_SECRET:
         raise HTTPException(status_code=401, detail="Invalid webhook token")
     return True
+
+
+def _require_tierra_token(x_tierra_token: str = Header(default="")) -> bool:
+    if x_tierra_token != TIERRA_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid Tierra token")
+    return True
+
+
+@api.patch("/menu/availability")
+async def patch_menu_availability(
+    payload: dict,
+    _: bool = Depends(_require_tierra_token),
+):
+    """
+    Update availability for one or more menu items.
+
+    Auth:  X-Tierra-Token: tierra2024   (configurable via env TIERRA_TOKEN)
+
+    Body:
+    {
+        "items": [
+            {"id": "<uuid>", "available": true},
+            {"name": "Avocado Toast", "available": false}
+        ]
+    }
+
+    Returns 200 with:
+    {
+        "updated": [ { id, name, available, matched_by }, ... ],
+        "not_found": [ "<id or name>", ... ]
+    }
+    """
+    items = payload.get("items")
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="Field 'items' must be a non-empty array")
+
+    updated: list = []
+    not_found: list = []
+    for it in items:
+        if not isinstance(it, dict) or "available" not in it:
+            raise HTTPException(status_code=400, detail="Each item must include 'available'")
+        available = bool(it["available"])
+        item_id = it.get("id")
+        item_name = it.get("name")
+        if item_id:
+            query = {"id": str(item_id)}
+            matched_by = "id"
+            ref = item_id
+        elif item_name:
+            query = {"name": {"$regex": f"^{re.escape(str(item_name))}$", "$options": "i"}}
+            matched_by = "name"
+            ref = item_name
+        else:
+            raise HTTPException(status_code=400, detail="Each item must include either 'id' or 'name'")
+
+        res = await db.menu_items.update_one(query, {"$set": {"available": available}})
+        if res.matched_count == 0:
+            not_found.append(ref)
+            continue
+        doc = await db.menu_items.find_one(query, {"_id": 0, "id": 1, "name": 1, "available": 1})
+        if doc:
+            updated.append({**doc, "matched_by": matched_by})
+
+    logger.info(
+        "PATCH /menu/availability — updated=%s not_found=%s", len(updated), not_found,
+    )
+    return {"updated": updated, "not_found": not_found}
 
 
 @api.post("/webhooks/menu/availability")
