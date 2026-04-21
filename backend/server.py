@@ -30,6 +30,7 @@ from brand_config import BRAND as BRAND_CFG
 import storage as obj_storage
 import escpos
 import image_utils
+import ai_service
 
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionRequest,
@@ -1262,6 +1263,47 @@ async def admin_update_slot_config(payload: SlotConfigUpdate, _: str = Depends(r
 
 
 # ---------- Webhooks (external systems e.g. Tierra OS / Lark Base) ----------
+@api.post("/ai/analyze-invoice")
+async def ai_analyze_invoice(
+    payload: dict,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Analyze an invoice/receipt image and return structured data.
+
+    Auth: X-Tierra-Token
+
+    Body:
+    {
+        "image_base64": "<base64 JPEG/PNG/WEBP, no data: prefix>",
+        "media_type": "image/jpeg"  // optional
+    }
+
+    Response:
+    {
+        "fornitore": "...",
+        "importo": 125.50,
+        "data": "2026-04-20",
+        "scadenza": "2026-05-20",
+        "categoria": "Alimentari",
+        "note": "P.IVA IT12345 - Fattura 123"
+    }
+    """
+    img = payload.get("image_base64")
+    if not img or not isinstance(img, str):
+        raise HTTPException(status_code=400, detail="Campo 'image_base64' mancante o non valido")
+    media_type = payload.get("media_type", "image/jpeg")
+    try:
+        result = await ai_service.analyze_invoice(img, media_type=media_type)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=f"AI non ha restituito JSON valido: {e}")
+    except Exception as e:
+        logger.exception("Invoice analysis failed")
+        raise HTTPException(status_code=500, detail=f"Errore analisi fattura: {e}")
+    return result
+
+
 @api.patch("/menu/availability")
 async def patch_menu_availability(
     payload: dict,
