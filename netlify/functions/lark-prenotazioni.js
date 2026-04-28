@@ -1,6 +1,6 @@
 // netlify/functions/lark-prenotazioni.js
 // ════════════════════════════════════════════════════════════════════
-// Tierra OS v9 — Lark Base CRUD Prenotazioni
+// Tierra OS v9.1 — Lark Base CRUD Prenotazioni (FIX BODY PARSING)
 // ════════════════════════════════════════════════════════════════════
 // Endpoint: POST /.netlify/functions/lark-prenotazioni
 // Actions: create | update | delete | list
@@ -43,12 +43,11 @@ async function getTenantToken() {
   }
 
   _tokenCache.token = data.tenant_access_token;
-  _tokenCache.exp   = Date.now() + (data.expire - 60) * 1000; // refresh 60s prima della scadenza
+  _tokenCache.exp   = Date.now() + (data.expire - 60) * 1000;
   return _tokenCache.token;
 }
 
 // ─── Normalizza fields per Lark Base ────────────────────────────────────────
-// Lark Base accetta diversi tipi: text, number, date (ms), single_select (string), etc.
 function normalizeFields(input) {
   const out = {};
   for (const [k, v] of Object.entries(input || {})) {
@@ -56,6 +55,18 @@ function normalizeFields(input) {
     out[k] = v;
   }
   return out;
+}
+
+// ─── Body parser robusto (FIX v9.1) ─────────────────────────────────────────
+// Gestisce body come string (default Netlify) O come object (alcuni casi edge)
+function parseBody(eventBody) {
+  if (!eventBody) return {};
+  if (typeof eventBody === 'object') return eventBody;
+  try {
+    return JSON.parse(eventBody);
+  } catch (e) {
+    throw new Error("Invalid JSON body: " + e.message);
+  }
 }
 
 // ─── Handler principale ──────────────────────────────────────────────────────
@@ -78,7 +89,7 @@ exports.handler = async (event) => {
 
     const token = await getTenantToken();
     const baseUrl = `https://open.larksuite.com/open-apis/bitable/v1/apps/${BASE_ID}/tables/${TABLE_ID}/records`;
-    const body = event.body ? JSON.parse(event.body) : {};
+    const body = parseBody(event.body);
     const action = body.action || (event.httpMethod === "GET" ? "list" : "create");
 
     const authHeaders = {
@@ -142,7 +153,6 @@ exports.handler = async (event) => {
       });
       const data = await res.json();
       if (data.code !== 0 && data.code !== 1254030) {
-        // 1254030 = record già cancellato, OK
         throw new Error("Lark delete failed: " + (data.msg || JSON.stringify(data)));
       }
       return {
