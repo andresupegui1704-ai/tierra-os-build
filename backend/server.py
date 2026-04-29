@@ -1674,12 +1674,12 @@ async def tierra_update_order(
     background: BackgroundTasks,
     _: bool = Depends(_require_tierra_token),
 ):
-    """OS endpoint: update order status / payment_status / paid_at / notes.
+    """OS endpoint: update order status / payment_status / paid_at / notes / payment_method.
 
     Body example: {"status":"paid","payment_status":"paid","paid_at":"2026-04-29T20:35Z"}
     Triggers outgoing push back to OS for echo confirmation.
     """
-    allowed_keys = {"status", "payment_status", "paid_at", "notes", "table_code"}
+    allowed_keys = {"status", "payment_status", "paid_at", "notes", "table_code", "payment_method"}
     updates = {k: v for k, v in (payload or {}).items() if k in allowed_keys and v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No valid fields to update")
@@ -1690,6 +1690,137 @@ async def tierra_update_order(
     doc = await db.orders.find_one({"id": order_id}, {"_id": 0})
     background.add_task(_push_order_update_safe, doc)
     return {"ok": True, "order": doc}
+
+
+# ---------- P0.3 — All-in-one webhook: order paid → table libero ----------
+@api.post("/tierra/webhook/order-paid")
+async def tierra_webhook_order_paid(
+    payload: dict,
+    background: BackgroundTasks,
+    idempotency_key: str = Header(default="", alias="Idempotency-Key"),
+    _: bool = Depends(_require_tierra_token),
+):
+    """OS chiama questo webhook quando il cameriere marca un ordine "pagato".
+
+    Il sito esegue atomicamente:
+      1. Marca l'ordine paid (status + payment_status + paid_at + payment_method)
+      2. Libera il tavolo (status='libero', svuota merged_with)
+      3. Push verso Lark "Ordini" (status=paid)
+      4. Push verso Lark "Tavoli" (libero) — se TIERRA_OS_BASE_URL configurato
+
+    Body:
+      { order_id, table_code, amount, payment_method?, paid_at? }
+
+    Risposta: { ok, table_code, table_status, lark_updated, order }
+    """
+    order_id = payload.get("order_id")
+    table_code = (payload.get("table_code") or "").upper() or None
+    if not order_id:
+        raise HTTPException(status_code=400, detail="order_id mancante")
+
+    # Idempotency replay
+    if idempotency_key:
+        cached = await db.idempotency.find_one({"key": idempotency_key}, {"_id": 0})
+        if cached and cached.get("response"):
+            return cached["response"]
+
+    paid_at = payload.get("paid_at") or _now_iso()
+    payment_method = payload.get("payment_method", "cash")
+    amount = payload.get("amount")
+
+    # 1) Mark order paid
+    order_updates = {
+        "status": "paid",
+        "payment_status": "paid",
+        "paid_at": paid_at,
+        "payment_method": payment_method,
+        "updated_at": _now_iso(),
+    }
+    if amount is not None:
+        order_updates["paid_amount"] = float(amount)
+    res = await db.orders.update_one({"id": order_id}, {"$set": order_updates})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Ordine {order_id} non trovato")
+    order_doc = await db.orders.find_one({"id": order_id}, {"_id": 0})
+
+    # Resolve table from order if not provided
+    if not table_code:
+        table_code = (order_doc.get("table_code") or "").upper() or None
+
+    # 2) Free the table (only if no other open orders on it)
+    table_status = None
+    if table_code:
+        other_open = await db.orders.count_documents(
+            {"table_code": table_code, "status": {"$in": ["open", "preparing", "ready"]}, "id": {"$ne": order_id}},
+        )
+        if other_open == 0:
+            await db.tables.update_one(
+                {"code": table_code},
+                {"$set": {"status": "libero", "merged_with": [], "updated_at": _now_iso()}},
+            )
+            table_status = "libero"
+        else:
+            table_status = "occupato"
+
+    # 3) Background: push aggiornamento ordine + tavolo a Tierra OS Lark
+    background.add_task(_push_order_update_safe, order_doc)
+    if table_code:
+        async def _push_table_free():
+            try:
+                # Optional: call Tierra OS lark-tavoli function if configured
+                # (no-op se la function/endpoint non esiste)
+                from tierra_os_sync import _enabled, _post
+                if _enabled():
+                    await _post("/.netlify/functions/lark-tavoli",
+                                {"action": "update", "fields": {"codice": table_code, "status": table_status}})
+            except Exception as e:
+                logger.warning("Lark tavoli push failed: %s", e)
+        background.add_task(_push_table_free)
+
+    response = {
+        "ok": True,
+        "order_id": order_id,
+        "table_code": table_code,
+        "table_status": table_status,
+        "lark_updated": tierra_os_sync._enabled(),
+        "order": order_doc,
+    }
+    await _idempotency_store(idempotency_key, response)
+    return response
+
+
+# ---------- P1.1 — Tierra-namespaced alias for tables (PATCH /api/tierra/tables/{codice}) ----------
+@api.patch("/tierra/tables/{codice}")
+async def tierra_update_table(
+    codice: str,
+    payload: TableUpdate,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Tierra-namespaced alias of PATCH /api/tables/{code}.
+    Same auth, same body. Provided for naming consistency with Tierra OS.
+    """
+    from models import _normalize_table_status
+    updates: dict = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if "status" in updates:
+        updates["status"] = _normalize_table_status(updates["status"])
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+    updates["updated_at"] = _now_iso()
+    res = await db.tables.update_one({"code": codice.upper()}, {"$set": updates})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Tavolo {codice} non trovato")
+    doc = await db.tables.find_one({"code": codice.upper()}, {"_id": 0})
+    doc["codice"] = doc.get("code")
+    return {"ok": True, "table": doc}
+
+
+@api.get("/tierra/tables")
+async def tierra_list_tables(_: bool = Depends(_require_tierra_token)):
+    """List all tables for Tierra OS (with `codice` alias)."""
+    tables = await db.tables.find({}, {"_id": 0}).sort("order", 1).to_list(100)
+    for t in tables:
+        t["codice"] = t.get("code")
+    return {"ok": True, "tables": tables, "count": len(tables)}
 
 
 async def _push_order_update_safe(order_doc: dict) -> None:
