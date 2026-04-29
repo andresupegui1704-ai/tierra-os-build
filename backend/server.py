@@ -284,15 +284,29 @@ async def admin_delete_item(item_id: str, _: str = Depends(require_admin)):
 @api.post("/orders", response_model=Order)
 async def create_order(payload: OrderCreate, request: Request, background_tasks: BackgroundTasks):
     # Validate items against DB and recompute total on server
-    item_ids = [i.item_id for i in payload.items]
+    # Support OS-style items without item_id by resolving by name (case-insensitive)
+    needs_resolve = [i for i in payload.items if not i.item_id and i.name]
+    if needs_resolve:
+        names = [i.name for i in needs_resolve]
+        regex = "|".join(f"^{re.escape(n)}$" for n in names)
+        resolved = await db.menu_items.find(
+            {"name": {"$regex": regex, "$options": "i"}}, {"_id": 0}
+        ).to_list(500)
+        name_to_id = {r["name"].lower(): r["id"] for r in resolved}
+        for li in needs_resolve:
+            rid = name_to_id.get(li.name.lower())
+            if rid:
+                li.item_id = rid
+
+    item_ids = [i.item_id for i in payload.items if i.item_id]
     db_items = await db.menu_items.find({"id": {"$in": item_ids}}, {"_id": 0}).to_list(500)
     db_map = {i["id"]: i for i in db_items}
     subtotal = 0.0
     validated_items = []
     for li in payload.items:
-        dbi = db_map.get(li.item_id)
+        dbi = db_map.get(li.item_id) if li.item_id else None
         if not dbi:
-            raise HTTPException(status_code=400, detail=f"Piatto non disponibile: {li.name}")
+            raise HTTPException(status_code=400, detail=f"Piatto non trovato: {li.name}")
         if not dbi.get("available", True):
             raise HTTPException(status_code=400, detail=f"Piatto esaurito: {dbi['name']}")
         if li.quantity <= 0:
@@ -350,6 +364,12 @@ async def create_order(payload: OrderCreate, request: Request, background_tasks:
     if payload.service_type == "tavolo" and not payload.table_code:
         raise HTTPException(status_code=400, detail="Codice tavolo obbligatorio per ordini al tavolo")
 
+    # For OS dine-in orders, allow missing customer fields → use sensible defaults
+    customer_name = payload.customer_name or (f"Tavolo {payload.table_code}" if payload.service_type == "tavolo" else "")
+    customer_phone = payload.customer_phone or ("-" if payload.service_type == "tavolo" else "")
+    if not customer_name or not customer_phone:
+        raise HTTPException(status_code=400, detail="Nome e telefono cliente obbligatori")
+
     # Delivery fee (simple, server-side)
     delivery_fee = 3.50 if payload.service_type == "delivery" else 0.0
     total = round(subtotal + delivery_fee, 2)
@@ -361,8 +381,8 @@ async def create_order(payload: OrderCreate, request: Request, background_tasks:
     order = Order(
         service_type=payload.service_type,
         items=validated_items,
-        customer_name=payload.customer_name,
-        customer_phone=payload.customer_phone,
+        customer_name=customer_name,
+        customer_phone=customer_phone,
         customer_email=payload.customer_email,
         delivery_address=payload.delivery_address,
         scheduled_time=payload.scheduled_time,
@@ -1098,8 +1118,15 @@ async def update_table(
     payload: TableUpdate,
     _: bool = Depends(_require_tierra_token),
 ):
-    """Update table state. Requires header X-Tierra-Token."""
+    """Update table state. Requires header X-Tierra-Token.
+
+    Accepts both Italian ("riservato","libero","occupato","confermato",...) and
+    English aliases ("reserved","free","busy",...) — auto-normalized.
+    """
+    from models import _normalize_table_status
     updates: dict = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if "status" in updates:
+        updates["status"] = _normalize_table_status(updates["status"])
     if not updates:
         raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
     updates["updated_at"] = _now_iso()
@@ -1579,6 +1606,9 @@ async def tierra_sync_snapshot(
     ).sort("date", 1).to_list(2000)
 
     tables = await db.tables.find({}, {"_id": 0}).sort("order", 1).to_list(100)
+    # Add OS-style alias 'codice' for backward compat with Tierra OS UI
+    for t in tables:
+        t["codice"] = t.get("code")
 
     open_orders = await db.orders.find(
         {"service_type": "tavolo", "status": {"$in": ["open", "preparing", "ready"]}},
@@ -1593,6 +1623,7 @@ async def tierra_sync_snapshot(
     sc = await db.slot_config.find_one({"id": "default"}, {"_id": 0}) or SlotConfig().model_dump()
 
     return {
+        "ok": True,
         "server_time": _now_iso(),
         "range": {"from": today_s, "to": end_s},
         "reservations": reservations,
@@ -1608,6 +1639,8 @@ async def tierra_list_orders(
     since: Optional[str] = None,
     status: Optional[str] = None,
     service_type: Optional[str] = None,
+    table: Optional[str] = None,            # OS-style alias for table_code
+    table_code: Optional[str] = None,
     limit: int = 200,
     _: bool = Depends(_require_tierra_token),
 ):
@@ -1616,17 +1649,54 @@ async def tierra_list_orders(
     Filters:
       - since: ISO timestamp (created_at >= since)
       - status: comma-separated list of statuses
-      - service_type: delivery | asporto | preordine | tavolo
+      - service_type: delivery | asporto | preordine | tavolo (also "table"/"takeaway" accepted)
+      - table / table_code: e.g. "E3" (OS uses ?table=E3)
     """
+    from models import _normalize_service_type
     q: dict = {}
     if since:
         q["created_at"] = {"$gte": since}
     if status:
         q["status"] = {"$in": [s.strip() for s in status.split(",") if s.strip()]}
     if service_type:
-        q["service_type"] = service_type
+        q["service_type"] = _normalize_service_type(service_type)
+    tc = table_code or table
+    if tc:
+        q["table_code"] = tc
     rows = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(max(1, min(limit, 500)))
-    return {"count": len(rows), "orders": rows}
+    return {"ok": True, "count": len(rows), "items": rows, "orders": rows}
+
+
+@api.patch("/tierra/orders/{order_id}")
+async def tierra_update_order(
+    order_id: str,
+    payload: dict,
+    background: BackgroundTasks,
+    _: bool = Depends(_require_tierra_token),
+):
+    """OS endpoint: update order status / payment_status / paid_at / notes.
+
+    Body example: {"status":"paid","payment_status":"paid","paid_at":"2026-04-29T20:35Z"}
+    Triggers outgoing push back to OS for echo confirmation.
+    """
+    allowed_keys = {"status", "payment_status", "paid_at", "notes", "table_code"}
+    updates = {k: v for k, v in (payload or {}).items() if k in allowed_keys and v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    updates["updated_at"] = _now_iso()
+    res = await db.orders.update_one({"id": order_id}, {"$set": updates})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Ordine non trovato")
+    doc = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    background.add_task(_push_order_update_safe, doc)
+    return {"ok": True, "order": doc}
+
+
+async def _push_order_update_safe(order_doc: dict) -> None:
+    try:
+        await tierra_os_sync.push_order_update(order_doc)
+    except Exception as e:
+        logger.warning("Order push update failed for %s: %s", order_doc.get("id"), e)
 
 
 @api.post("/tierra/sync/replay")

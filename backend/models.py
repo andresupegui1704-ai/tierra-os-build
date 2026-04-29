@@ -1,5 +1,5 @@
 """Pydantic models for Tierra Organic Bistro."""
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_validator
 from typing import List, Optional, Literal
 from datetime import datetime, timezone
 import uuid
@@ -109,6 +109,19 @@ class MenuItemCreate(BaseModel):
 ServiceType = Literal["delivery", "asporto", "preordine", "tavolo"]
 
 
+def _normalize_service_type(v):
+    """Accept English aliases used by Tierra OS and map to internal IT values."""
+    if not v:
+        return v
+    s = str(v).strip().lower()
+    aliases = {
+        "table": "tavolo", "dine-in": "tavolo", "dinein": "tavolo",
+        "takeaway": "asporto", "take-away": "asporto", "pickup": "asporto",
+        "preorder": "preordine", "pre-order": "preordine",
+    }
+    return aliases.get(s, s)
+
+
 class OrderLineItemSelection(BaseModel):
     group_name: str
     option_names: List[str]
@@ -116,20 +129,26 @@ class OrderLineItemSelection(BaseModel):
 
 
 class OrderLineItem(BaseModel):
-    item_id: str
+    item_id: Optional[str] = None  # optional: OS may send only "name"
     name: str
-    price: float
-    quantity: int
+    price: Optional[float] = None
+    quantity: int = 1
     customizations: List[OrderLineItemSelection] = Field(default_factory=list)
     unit_price: Optional[float] = None  # price + sum(customization deltas)
     line_total: Optional[float] = None  # unit_price * quantity
+    # OS-style aliases
+    qty: Optional[int] = None  # alias of quantity
+
+    def model_post_init(self, __context):
+        if self.qty and not self.quantity:
+            object.__setattr__(self, "quantity", int(self.qty))
 
 
 class OrderCreate(BaseModel):
     service_type: ServiceType
     items: List[OrderLineItem]
-    customer_name: str
-    customer_phone: str
+    customer_name: Optional[str] = None      # optional for OS dine-in
+    customer_phone: Optional[str] = None
     customer_email: Optional[EmailStr] = None  # optional for dine-in ("tavolo")
     delivery_address: Optional[str] = None
     scheduled_time: Optional[str] = None
@@ -138,7 +157,17 @@ class OrderCreate(BaseModel):
     marketing_consent: bool = False
     # Dine-in
     table_code: Optional[str] = None  # e.g. "E1", "I3"
+    table: Optional[str] = None       # OS-style alias of table_code
     waiter: Optional[str] = None      # waiter name / id
+
+    @field_validator("service_type", mode="before")
+    @classmethod
+    def _norm_service(cls, v):
+        return _normalize_service_type(v)
+
+    def model_post_init(self, __context):
+        if self.table and not self.table_code:
+            object.__setattr__(self, "table_code", self.table)
 
 
 class Order(BaseModel):
@@ -200,7 +229,23 @@ class Reservation(BaseModel):
 
 # ---------- Tables ----------
 TableZone = Literal["interno", "esterno"]
-TableStatus = Literal["libero", "confermato", "arrivato", "accorpato", "cancellato", "occupato"]
+TableStatus = Literal["libero", "riservato", "confermato", "arrivato", "accorpato", "cancellato", "occupato"]
+
+
+def _normalize_table_status(v):
+    """Map English/OS-style aliases to internal table statuses."""
+    if not v:
+        return v
+    s = str(v).strip().lower()
+    aliases = {
+        "free": "libero", "available": "libero",
+        "reserved": "riservato",
+        "arrived": "arrivato",
+        "merged": "accorpato",
+        "cancelled": "cancellato", "canceled": "cancellato",
+        "busy": "occupato", "occupied": "occupato",
+    }
+    return aliases.get(s, s)
 
 
 class Table(BaseModel):
@@ -222,6 +267,11 @@ class TableUpdate(BaseModel):
     merged_with: Optional[List[str]] = None
     capacity: Optional[int] = None
     label: Optional[str] = None
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _norm_status(cls, v):
+        return _normalize_table_status(v)
 
 
 # ---------- Slot / Capacity config ----------
