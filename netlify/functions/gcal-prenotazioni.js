@@ -1,14 +1,18 @@
 // netlify/functions/gcal-prenotazioni.js
 // ════════════════════════════════════════════════════════════════════
-// Tierra OS v9 — Google Calendar CRUD via Service Account JWT
+// Tierra OS v9.2 — Google Calendar CRUD via Service Account JWT
 // ════════════════════════════════════════════════════════════════════
 // Endpoint: POST /.netlify/functions/gcal-prenotazioni
 // Actions: create | update | delete | list
 //
+// IMPORTANTE: Richiede env vars su Netlify:
+//   - GCAL_CALENDAR_ID            (es. xxx@group.calendar.google.com)
+//   - GCAL_SERVICE_ACCOUNT_KEY    (JSON completo del service account)
+//
 // Body esempio:
-//   { "action": "create", "prenotazione": { cliente, data, ora, pax, ... } }
-//   { "action": "update", "eventId": "abc", "prenotazione": {...} }
-//   { "action": "delete", "eventId": "abc" }
+//   { "action": "create", "prenotazione": { cliente, data, ora, pax, telefono, note, ... } }
+//   { "action": "update", "eventId": "abc123", "prenotazione": {...} }
+//   { "action": "delete", "eventId": "abc123" }
 //   { "action": "list", "params": { timeMin, maxResults } }
 //
 // Response: { ok: true, eventId, event } | { ok: false, error }
@@ -19,171 +23,252 @@ const crypto = require("crypto");
 const CALENDAR_ID = process.env.GCAL_CALENDAR_ID;
 const SA_KEY_RAW  = process.env.GCAL_SERVICE_ACCOUNT_KEY;
 
-// ─── JWT generator per Service Account ──────────────────────────────────────
+// ─── Body parser robusto ─────────────────────────────────────────────────────
+function parseBody(eventBody) {
+  if (!eventBody) return {};
+  if (typeof eventBody === 'object') return eventBody;
+  try {
+    return JSON.parse(eventBody);
+  } catch (e) {
+    throw new Error("Invalid JSON body: " + e.message);
+  }
+}
+
+// ─── Parse Service Account key (JSON string da env var) ──────────────────────
+function parseServiceAccount() {
+  if (!SA_KEY_RAW) {
+    throw new Error("GCAL_SERVICE_ACCOUNT_KEY mancante");
+  }
+  try {
+    const sa = typeof SA_KEY_RAW === 'string' ? JSON.parse(SA_KEY_RAW) : SA_KEY_RAW;
+    if (!sa.client_email || !sa.private_key) {
+      throw new Error("Service Account key incompleta (mancano client_email o private_key)");
+    }
+    // Normalizza newlines nella private key (Netlify a volte li escapa)
+    sa.private_key = sa.private_key.replace(/\\n/g, '\n');
+    return sa;
+  } catch (e) {
+    throw new Error("GCAL_SERVICE_ACCOUNT_KEY non è JSON valido: " + e.message);
+  }
+}
+
+// ─── base64url encoding ──────────────────────────────────────────────────────
 function base64url(input) {
-  return Buffer.from(input)
-    .toString("base64")
+  const buf = typeof input === 'string' ? Buffer.from(input) : input;
+  return buf.toString("base64")
     .replace(/=/g, "")
     .replace(/\+/g, "-")
     .replace(/\//g, "_");
 }
 
-async function getAccessToken() {
-  if (!SA_KEY_RAW) throw new Error("GCAL_SERVICE_ACCOUNT_KEY mancante");
-
-  let sa;
-  try {
-    sa = typeof SA_KEY_RAW === "string" ? JSON.parse(SA_KEY_RAW) : SA_KEY_RAW;
-  } catch (e) {
-    throw new Error("GCAL_SERVICE_ACCOUNT_KEY non è un JSON valido: " + e.message);
-  }
-
-  if (!sa.client_email || !sa.private_key) {
-    throw new Error("Service account key incompleta (manca client_email o private_key)");
-  }
-
-  const now = Math.floor(Date.now() / 1000);
+// ─── JWT generator (RS256 firma con private key del SA) ──────────────────────
+function generateJWT(sa) {
+  const now    = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
-  const payload = {
-    iss: sa.client_email,
+  const claim  = {
+    iss:   sa.client_email,
     scope: "https://www.googleapis.com/auth/calendar",
-    aud: "https://oauth2.googleapis.com/token",
-    exp: now + 3600,
-    iat: now,
+    aud:   "https://oauth2.googleapis.com/token",
+    exp:   now + 3600,
+    iat:   now,
   };
 
-  const encHeader  = base64url(JSON.stringify(header));
-  const encPayload = base64url(JSON.stringify(payload));
-  const signInput  = `${encHeader}.${encPayload}`;
+  const headerB64 = base64url(JSON.stringify(header));
+  const claimB64  = base64url(JSON.stringify(claim));
+  const signInput = headerB64 + "." + claimB64;
 
   const signer = crypto.createSign("RSA-SHA256");
   signer.update(signInput);
   signer.end();
   const signature = signer.sign(sa.private_key);
-  const encSig    = base64url(signature);
+  const sigB64    = base64url(signature);
 
-  const jwt = `${signInput}.${encSig}`;
+  return signInput + "." + sigB64;
+}
+
+// ─── Access Token (cache 1h) ─────────────────────────────────────────────────
+let _tokenCache = { token: null, exp: 0 };
+
+async function getAccessToken() {
+  if (_tokenCache.token && Date.now() < _tokenCache.exp) {
+    return _tokenCache.token;
+  }
+
+  const sa  = parseServiceAccount();
+  const jwt = generateJWT(sa);
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion:  jwt,
+    }).toString(),
   });
 
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error("Token GCal failed: " + err);
+  const data = await res.json();
+  if (!res.ok || !data.access_token) {
+    throw new Error("OAuth token failed: " + (data.error_description || data.error || JSON.stringify(data)));
   }
 
-  const data = await res.json();
-  return data.access_token;
+  _tokenCache.token = data.access_token;
+  _tokenCache.exp   = Date.now() + (data.expires_in - 60) * 1000;
+  return _tokenCache.token;
 }
 
-// ─── Build evento Google Calendar da prenotazione ───────────────────────────
-function buildEvent(p) {
-  if (!p || !p.cliente || !p.data || !p.ora) {
-    throw new Error("Prenotazione incompleta (cliente/data/ora mancanti)");
+// ─── Conversione prenotazione → evento Google Calendar ───────────────────────
+function prenoToGcalEvent(p) {
+  if (!p.data || !p.ora) {
+    throw new Error("Prenotazione: data e ora obbligatorie");
   }
 
-  // Durata default 90 min
-  const start = new Date(`${p.data}T${p.ora}:00`);
-  if (isNaN(start.getTime())) {
-    throw new Error(`Data/ora non valide: ${p.data} ${p.ora}`);
+  // ISO datetime: "2026-05-01T20:00:00"
+  const startISO = p.data + "T" + p.ora + ":00";
+
+  // Durata default: 2h (configurabile via p.duration_minutes)
+  const durationMin = Number(p.duration_minutes) || 120;
+  const startDate   = new Date(startISO);
+  if (isNaN(startDate.getTime())) {
+    throw new Error("Prenotazione: data/ora non valide (" + startISO + ")");
   }
-  const end = new Date(start.getTime() + 90 * 60 * 1000);
+  const endDate = new Date(startDate.getTime() + durationMin * 60 * 1000);
+
+  // Build description con tutti i dati prenotazione
+  const descParts = [];
+  if (p.pax)      descParts.push("👥 PAX: " + p.pax);
+  if (p.tavolo)   descParts.push("🍽️ Tavolo: " + p.tavolo);
+  if (p.telefono) descParts.push("📞 Telefono: " + p.telefono);
+  if (p.email)    descParts.push("✉️ Email: " + p.email);
+  if (p.note)     descParts.push("\n📝 Note:\n" + p.note);
+  if (p.booking_id) descParts.push("\n[booking_id: " + p.booking_id + "]");
+
+  const summary = "🍽️ " + (p.cliente || "Prenotazione") + " (" + (p.pax || 1) + " pax)";
 
   return {
-    summary: `🍽️ ${p.cliente} (${p.pax || 1} pax)${p.tavolo ? " — T" + p.tavolo : ""}`,
-    description: [
-      `Cliente: ${p.cliente}`,
-      `PAX: ${p.pax || 1}`,
-      p.tavolo ? `Tavolo: ${p.tavolo}` : "",
-      p.telefono ? `Tel: ${p.telefono}` : "",
-      p.email ? `Email: ${p.email}` : "",
-      p.note ? `\nNote: ${p.note}` : "",
-      `\n— Tierra OS · ID: ${p.booking_id || ""}`,
-    ].filter(Boolean).join("\n"),
-    start: { dateTime: start.toISOString(), timeZone: "Europe/Rome" },
-    end:   { dateTime: end.toISOString(),   timeZone: "Europe/Rome" },
-    location: "Tierra Organic Bistrot, Via Tirso 34, Roma",
+    summary,
+    description: descParts.join("\n"),
+    start: { dateTime: startDate.toISOString(), timeZone: "Europe/Rome" },
+    end:   { dateTime: endDate.toISOString(),   timeZone: "Europe/Rome" },
+    // Color ID 10 = green (confermata), 5 = giallo (in_attesa), 11 = rosso (annullata)
+    colorId: p.status === "annullata" ? "11" : p.status === "in_attesa" ? "5" : "10",
+    extendedProperties: {
+      private: {
+        booking_id: p.booking_id || "",
+        source:     "tierra_os",
+        cliente:    p.cliente || "",
+        pax:        String(p.pax || 1),
+        tavolo:     p.tavolo || "",
+        status:     p.status || "confermata",
+      },
+    },
   };
 }
 
 // ─── Handler principale ──────────────────────────────────────────────────────
 exports.handler = async (event) => {
   const headers = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin":  "*",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json",
+    "Content-Type":                 "application/json",
   };
 
-  // CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers, body: "" };
   }
 
   try {
     if (!CALENDAR_ID) throw new Error("GCAL_CALENDAR_ID mancante");
+    if (!SA_KEY_RAW)  throw new Error("GCAL_SERVICE_ACCOUNT_KEY mancante");
 
-    const token = await getAccessToken();
-    const baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events`;
-    const body = event.body ? JSON.parse(event.body) : {};
-    const action = body.action || (event.httpMethod === "GET" ? "list" : "create");
+    const token   = await getAccessToken();
+    const calId   = encodeURIComponent(CALENDAR_ID);
+    const baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`;
+    const body    = parseBody(event.body);
+    const action  = body.action || (event.httpMethod === "GET" ? "list" : "create");
+
+    const authHeaders = {
+      Authorization:  "Bearer " + token,
+      "Content-Type": "application/json",
+    };
 
     // ─── CREATE ─────────────────────────────────────────────────────
     if (action === "create") {
-      const ev = buildEvent(body.prenotazione);
+      if (!body.prenotazione) throw new Error("prenotazione mancante");
+      const gcalEvent = prenoToGcalEvent(body.prenotazione);
+
       const res = await fetch(baseUrl, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(ev),
+        headers: authHeaders,
+        body: JSON.stringify(gcalEvent),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || "Create failed");
+
+      if (!res.ok) {
+        throw new Error("GCal create failed: " + (data.error?.message || JSON.stringify(data)));
+      }
+
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ ok: true, eventId: data.id, event: data }),
+        body: JSON.stringify({
+          ok:      true,
+          eventId: data.id,
+          htmlLink: data.htmlLink,
+          event:   data,
+        }),
       };
     }
 
     // ─── UPDATE ─────────────────────────────────────────────────────
     if (action === "update") {
-      if (!body.eventId) throw new Error("eventId mancante");
-      const ev = buildEvent(body.prenotazione);
-      const res = await fetch(`${baseUrl}/${body.eventId}`, {
+      if (!body.eventId)      throw new Error("eventId mancante");
+      if (!body.prenotazione) throw new Error("prenotazione mancante");
+
+      const gcalEvent = prenoToGcalEvent(body.prenotazione);
+
+      const res = await fetch(`${baseUrl}/${encodeURIComponent(body.eventId)}`, {
         method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(ev),
+        headers: authHeaders,
+        body: JSON.stringify(gcalEvent),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || "Update failed");
+
+      if (!res.ok) {
+        throw new Error("GCal update failed: " + (data.error?.message || JSON.stringify(data)));
+      }
+
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ ok: true, eventId: data.id, event: data }),
+        body: JSON.stringify({
+          ok:      true,
+          eventId: data.id,
+          htmlLink: data.htmlLink,
+          event:   data,
+        }),
       };
     }
 
     // ─── DELETE ─────────────────────────────────────────────────────
     if (action === "delete") {
       if (!body.eventId) throw new Error("eventId mancante");
-      const res = await fetch(`${baseUrl}/${body.eventId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+
+      const res = await fetch(`${baseUrl}/${encodeURIComponent(body.eventId)}`, {
+        method:  "DELETE",
+        headers: authHeaders,
       });
-      // 410 = già cancellato, 404 = non esiste — entrambi OK
+
+      // 204 No Content = OK; 410 Gone = già cancellato (OK); 404 = non trovato (OK)
       if (!res.ok && res.status !== 410 && res.status !== 404) {
-        const err = await res.text();
-        throw new Error(err);
+        let errMsg = "GCal delete failed: HTTP " + res.status;
+        try {
+          const errData = await res.json();
+          errMsg += " — " + (errData.error?.message || JSON.stringify(errData));
+        } catch (e) {}
+        throw new Error(errMsg);
       }
+
       return {
         statusCode: 200,
         headers,
@@ -193,24 +278,52 @@ exports.handler = async (event) => {
 
     // ─── LIST ───────────────────────────────────────────────────────
     if (action === "list") {
-      const params = body.params || {};
+      const params      = body.params || {};
+      const timeMin     = params.timeMin     || new Date().toISOString();
+      const maxResults  = Math.min(params.maxResults || 50, 250);
+      const singleEvents = params.singleEvents !== false;
+
       const qs = new URLSearchParams({
-        maxResults: String(params.maxResults || 100),
-        orderBy: "startTime",
-        singleEvents: "true",
-        timeMin: params.timeMin || new Date(Date.now() - 86400000).toISOString(),
+        timeMin,
+        maxResults:   String(maxResults),
+        singleEvents: String(singleEvents),
+        orderBy:      "startTime",
       });
       if (params.timeMax) qs.append("timeMax", params.timeMax);
+      if (params.q)       qs.append("q",       params.q);
 
       const res = await fetch(`${baseUrl}?${qs}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        method:  "GET",
+        headers: authHeaders,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || "List failed");
+
+      if (!res.ok) {
+        throw new Error("GCal list failed: " + (data.error?.message || JSON.stringify(data)));
+      }
+
+      const items = (data.items || []).map(ev => ({
+        eventId:     ev.id,
+        summary:     ev.summary,
+        description: ev.description,
+        start:       ev.start?.dateTime || ev.start?.date,
+        end:         ev.end?.dateTime   || ev.end?.date,
+        booking_id:  ev.extendedProperties?.private?.booking_id || "",
+        cliente:     ev.extendedProperties?.private?.cliente    || "",
+        pax:         Number(ev.extendedProperties?.private?.pax) || 0,
+        tavolo:      ev.extendedProperties?.private?.tavolo     || "",
+        status:      ev.extendedProperties?.private?.status     || "",
+        htmlLink:    ev.htmlLink,
+      }));
+
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ ok: true, items: data.items || [] }),
+        body: JSON.stringify({
+          ok:    true,
+          items,
+          total: items.length,
+        }),
       };
     }
 
