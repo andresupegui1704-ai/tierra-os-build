@@ -1,6 +1,6 @@
 // netlify/functions/gcal-prenotazioni.js
 // ════════════════════════════════════════════════════════════════════
-// Tierra OS v9.2 — Google Calendar CRUD via Service Account JWT
+// Tierra OS v9.2.1 — Google Calendar CRUD via Service Account JWT (FIX timezone)
 // ════════════════════════════════════════════════════════════════════
 // Endpoint: POST /.netlify/functions/gcal-prenotazioni
 // Actions: create | update | delete | list
@@ -122,18 +122,45 @@ function prenoToGcalEvent(p) {
     throw new Error("Prenotazione: data e ora obbligatorie");
   }
 
-  // ISO datetime: "2026-05-01T20:00:00"
-  const startISO = p.data + "T" + p.ora + ":00";
+  // ─── Validazione formato data/ora ──────────────────────────────────────────
+  // data: "YYYY-MM-DD"  ora: "HH:MM" (con o senza :SS)
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(p.data);
+  const timeMatch = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(p.ora);
+  if (!dateMatch) throw new Error("Prenotazione: data non valida (" + p.data + ")");
+  if (!timeMatch) throw new Error("Prenotazione: ora non valida (" + p.ora + ")");
 
-  // Durata default: 2h (configurabile via p.duration_minutes)
+  const [, Y, M, D] = dateMatch;
+  const [, hh, mm, ss = "00"] = timeMatch;
+
+  // ─── Calcolo end con offset durata ─────────────────────────────────────────
+  // IMPORTANTE: Google Calendar accetta dateTime nel formato "YYYY-MM-DDTHH:MM:SS"
+  // SENZA suffisso Z/offset, e usa il campo timeZone per interpretare l'orario.
+  // Questo evita problemi di doppia conversione UTC↔Roma.
   const durationMin = Number(p.duration_minutes) || 120;
-  const startDate   = new Date(startISO);
-  if (isNaN(startDate.getTime())) {
-    throw new Error("Prenotazione: data/ora non valide (" + startISO + ")");
-  }
-  const endDate = new Date(startDate.getTime() + durationMin * 60 * 1000);
 
-  // Build description con tutti i dati prenotazione
+  // Convertiamo in minuti totali per calcolare l'ora di fine
+  const startTotalMin = parseInt(hh) * 60 + parseInt(mm);
+  const endTotalMin   = startTotalMin + durationMin;
+
+  // Calcolo data/ora di fine — semplice se non si attraversa la mezzanotte
+  let endY = Y, endM = M, endD = D;
+  let endHh = Math.floor(endTotalMin / 60);
+  const endMm = endTotalMin % 60;
+
+  // Se l'evento sfora la mezzanotte, avanziamo di un giorno
+  if (endHh >= 24) {
+    endHh = endHh - 24;
+    const nextDay = new Date(Date.UTC(parseInt(Y), parseInt(M) - 1, parseInt(D) + 1));
+    endY = String(nextDay.getUTCFullYear());
+    endM = String(nextDay.getUTCMonth() + 1).padStart(2, "0");
+    endD = String(nextDay.getUTCDate()).padStart(2, "0");
+  }
+
+  const pad = (n) => String(n).padStart(2, "0");
+  const startDateTime = `${Y}-${M}-${D}T${pad(hh)}:${pad(mm)}:${ss}`;
+  const endDateTime   = `${endY}-${endM}-${endD}T${pad(endHh)}:${pad(endMm)}:${ss}`;
+
+  // ─── Build description con tutti i dati prenotazione ───────────────────────
   const descParts = [];
   if (p.pax)      descParts.push("👥 PAX: " + p.pax);
   if (p.tavolo)   descParts.push("🍽️ Tavolo: " + p.tavolo);
@@ -147,8 +174,9 @@ function prenoToGcalEvent(p) {
   return {
     summary,
     description: descParts.join("\n"),
-    start: { dateTime: startDate.toISOString(), timeZone: "Europe/Rome" },
-    end:   { dateTime: endDate.toISOString(),   timeZone: "Europe/Rome" },
+    // dateTime senza Z/offset + timeZone esplicito = Google interpreta come ora locale Roma
+    start: { dateTime: startDateTime, timeZone: "Europe/Rome" },
+    end:   { dateTime: endDateTime,   timeZone: "Europe/Rome" },
     // Color ID 10 = green (confermata), 5 = giallo (in_attesa), 11 = rosso (annullata)
     colorId: p.status === "annullata" ? "11" : p.status === "in_attesa" ? "5" : "10",
     extendedProperties: {
