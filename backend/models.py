@@ -176,6 +176,7 @@ class ReservationCreate(BaseModel):
     notes: Optional[str] = None
     table_code: Optional[str] = None  # optional pre-assigned table
     zone: Optional[str] = None        # "interno" / "esterno" preferred zone
+    booking_id: Optional[str] = None  # external Tierra OS booking id (Lark recordId)
 
 
 class Reservation(BaseModel):
@@ -193,6 +194,8 @@ class Reservation(BaseModel):
     table_code: Optional[str] = None
     zone: Optional[str] = None
     source: str = "website"  # website | tierra_os | admin
+    booking_id: Optional[str] = None       # Tierra OS Lark recordId (when synced)
+    os_record_id: Optional[str] = None     # alias kept for back-compat with Lark UI
 
 
 # ---------- Tables ----------
@@ -253,6 +256,7 @@ class TierraReservationCreate(BaseModel):
     zone: Optional[TableZone] = None  # interno/esterno (optional, for capacity check)
     status: str = "confirmed"         # OS-created are auto-confirmed by default
     auto_print: bool = True
+    booking_id: Optional[str] = None   # Lark recordId (so site doesn't push back)
 
 
 class TierraReservationUpdate(BaseModel):
@@ -266,6 +270,7 @@ class TierraReservationUpdate(BaseModel):
     table_code: Optional[str] = None
     zone: Optional[TableZone] = None
     status: Optional[str] = None
+    booking_id: Optional[str] = None
 
 
 # ---------- Payments ----------

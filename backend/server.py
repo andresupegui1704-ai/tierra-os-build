@@ -31,6 +31,7 @@ import storage as obj_storage
 import escpos
 import image_utils
 import ai_service
+import tierra_os_sync
 
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionRequest,
@@ -281,7 +282,7 @@ async def admin_delete_item(item_id: str, _: str = Depends(require_admin)):
 
 # ---------- Orders ----------
 @api.post("/orders", response_model=Order)
-async def create_order(payload: OrderCreate, request: Request):
+async def create_order(payload: OrderCreate, request: Request, background_tasks: BackgroundTasks):
     # Validate items against DB and recompute total on server
     item_ids = [i.item_id for i in payload.items]
     db_items = await db.menu_items.find({"id": {"$in": item_ids}}, {"_id": 0}).to_list(500)
@@ -376,6 +377,9 @@ async def create_order(payload: OrderCreate, request: Request):
         waiter=payload.waiter,
     )
     await db.orders.insert_one(order.model_dump())
+
+    # Push order to Tierra OS in background (fire-and-forget)
+    background_tasks.add_task(_push_order_create, order.model_dump())
 
     # Dine-in: automatically queue a print job (no Stripe flow)
     if payload.service_type == "tavolo":
@@ -698,12 +702,14 @@ async def reservations_availability(date: str, time: str, guests: int = 1, zone:
 
 
 @api.post("/reservations", response_model=Reservation)
-async def create_reservation(payload: ReservationCreate):
+async def create_reservation(payload: ReservationCreate, background: BackgroundTasks):
     """Customer-facing endpoint: create a reservation in PENDING status.
 
     Raises 409 if the slot is already saturated.
     No email + no print is triggered until admin explicitly confirms via
     POST /admin/reservations/{id}/status?status=confirmed.
+
+    On success, fires an outgoing push to Tierra OS (Lark + GCal) in background.
     """
     if payload.guests < 1 or payload.guests > 20:
         raise HTTPException(status_code=400, detail="Numero ospiti non valido (1-20)")
@@ -712,6 +718,8 @@ async def create_reservation(payload: ReservationCreate):
     await db.reservations.insert_one(res.model_dump())
     logger.info("Reservation %s created (pending) for %s guests on %s %s",
                 res.id, res.guests, res.date, res.time)
+    # Fire-and-forget push to Tierra OS
+    background.add_task(_push_reservation_create, res.model_dump())
     return res
 
 
@@ -1155,12 +1163,19 @@ async def _queue_reservation_print(res_id: str):
 async def tierra_create_reservation(
     payload: TierraReservationCreate,
     background: BackgroundTasks,
+    idempotency_key: str = Header(default="", alias="Idempotency-Key"),
     _: bool = Depends(_require_tierra_token),
 ):
     """Tierra OS endpoint: create a reservation (auto-confirmed + auto-printed by default).
 
     Raises 409 if the slot is saturated.
+    Honors Idempotency-Key header to safely retry the same request.
     """
+    if idempotency_key:
+        cached = await db.idempotency.find_one({"key": idempotency_key}, {"_id": 0})
+        if cached and cached.get("response"):
+            return Reservation(**cached["response"])
+
     if payload.guests < 1 or payload.guests > 20:
         raise HTTPException(status_code=400, detail="Numero ospiti non valido (1-20)")
     await _check_capacity(payload.date, payload.time, payload.guests, zone=payload.zone)
@@ -1179,6 +1194,9 @@ async def tierra_create_reservation(
         if auto_print:
             await _queue_reservation_print(res.id)
     logger.info("Tierra OS reservation %s created status=%s", res.id, res.status)
+
+    # Idempotency cache
+    await _idempotency_store(idempotency_key, res.model_dump())
     return res
 
 
@@ -1484,6 +1502,172 @@ async def webhook_set_availability_bulk(
         payload.get("source", "unknown"), updated, not_found,
     )
     return {"ok": True, "updated": updated, "not_found": not_found, "results": results}
+
+
+# ---------- Tierra OS sync helpers (outgoing push) ----------
+async def _push_reservation_create(res_doc: dict) -> None:
+    """Background task: push a new reservation to Tierra OS, store returned recordId."""
+    try:
+        record_id = await tierra_os_sync.push_reservation_create(res_doc)
+        if record_id:
+            await db.reservations.update_one(
+                {"id": res_doc["id"]},
+                {"$set": {"booking_id": record_id, "os_record_id": record_id}},
+            )
+    except Exception as e:
+        logger.warning("Push reservation %s to Tierra OS failed: %s", res_doc.get("id"), e)
+
+
+async def _push_order_create(order_doc: dict) -> None:
+    try:
+        await tierra_os_sync.push_order_create(order_doc)
+    except Exception as e:
+        logger.warning("Push order %s to Tierra OS failed: %s", order_doc.get("id"), e)
+
+
+# ---------- Idempotency for Tierra endpoints ----------
+async def _idempotency_check(
+    idempotency_key: str = Header(default="", alias="Idempotency-Key"),
+) -> Optional[dict]:
+    """If header present, return cached response (if any) for replay protection.
+
+    On miss, returns None and the route handler is expected to call
+    `_idempotency_store(key, payload)` after producing the response.
+    Records expire after 24h via TTL index (created on startup).
+    """
+    if not idempotency_key:
+        return None
+    cached = await db.idempotency.find_one({"key": idempotency_key}, {"_id": 0})
+    return cached.get("response") if cached else None
+
+
+async def _idempotency_store(idempotency_key: str, response: dict) -> None:
+    if not idempotency_key:
+        return
+    await db.idempotency.update_one(
+        {"key": idempotency_key},
+        {"$set": {"key": idempotency_key, "response": response, "created_at": _now_iso()}},
+        upsert=True,
+    )
+
+
+# ---------- Tierra OS: full snapshot for single-call sync ----------
+@api.get("/tierra/sync-snapshot")
+async def tierra_sync_snapshot(
+    days_ahead: int = 7,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Single-call sync snapshot for Tierra OS dashboard.
+
+    Returns:
+      - reservations: from today to today+days_ahead (default 7)
+      - tables: all tables with current status
+      - open_orders: dine-in orders not yet completed
+      - menu_unavailable: list of menu items currently disabled
+      - slot_config: capacity rules
+      - server_time: ISO timestamp
+    """
+    from datetime import datetime, timedelta, timezone as tz
+    today = datetime.now(tz.utc).date()
+    end = today + timedelta(days=max(1, min(days_ahead, 60)))
+    today_s, end_s = today.isoformat(), end.isoformat()
+
+    reservations = await db.reservations.find(
+        {"date": {"$gte": today_s, "$lte": end_s},
+         "status": {"$nin": ["cancelled", "no_show"]}},
+        {"_id": 0},
+    ).sort("date", 1).to_list(2000)
+
+    tables = await db.tables.find({}, {"_id": 0}).sort("order", 1).to_list(100)
+
+    open_orders = await db.orders.find(
+        {"service_type": "tavolo", "status": {"$in": ["open", "preparing", "ready"]}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(500)
+
+    unavailable = await db.menu_items.find(
+        {"available": False},
+        {"_id": 0, "id": 1, "name": 1, "category_slug": 1, "available": 1},
+    ).to_list(500)
+
+    sc = await db.slot_config.find_one({"id": "default"}, {"_id": 0}) or SlotConfig().model_dump()
+
+    return {
+        "server_time": _now_iso(),
+        "range": {"from": today_s, "to": end_s},
+        "reservations": reservations,
+        "tables": tables,
+        "open_orders": open_orders,
+        "menu_unavailable": unavailable,
+        "slot_config": sc,
+    }
+
+
+@api.get("/tierra/orders")
+async def tierra_list_orders(
+    since: Optional[str] = None,
+    status: Optional[str] = None,
+    service_type: Optional[str] = None,
+    limit: int = 200,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Pull orders for Tierra OS (poll fallback when outgoing push isn't available).
+
+    Filters:
+      - since: ISO timestamp (created_at >= since)
+      - status: comma-separated list of statuses
+      - service_type: delivery | asporto | preordine | tavolo
+    """
+    q: dict = {}
+    if since:
+        q["created_at"] = {"$gte": since}
+    if status:
+        q["status"] = {"$in": [s.strip() for s in status.split(",") if s.strip()]}
+    if service_type:
+        q["service_type"] = service_type
+    rows = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(max(1, min(limit, 500)))
+    return {"count": len(rows), "orders": rows}
+
+
+@api.post("/tierra/sync/replay")
+async def tierra_replay_push(
+    body: dict,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Manually re-trigger a push to Tierra OS for a reservation or order
+    (useful when OS was down and we need to re-sync).
+
+    Body: {"type": "reservation"|"order", "id": "<uuid>"}
+    """
+    typ = body.get("type")
+    rid = body.get("id")
+    if typ not in ("reservation", "order") or not rid:
+        raise HTTPException(status_code=400, detail="Required: type (reservation|order) + id")
+    if typ == "reservation":
+        doc = await db.reservations.find_one({"id": rid}, {"_id": 0})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Reservation not found")
+        record_id = await tierra_os_sync.push_reservation_create(doc)
+        if record_id:
+            await db.reservations.update_one(
+                {"id": rid}, {"$set": {"booking_id": record_id, "os_record_id": record_id}},
+            )
+        return {"ok": True, "type": typ, "id": rid, "os_record_id": record_id}
+    doc = await db.orders.find_one({"id": rid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Order not found")
+    await tierra_os_sync.push_order_create(doc)
+    return {"ok": True, "type": typ, "id": rid}
+
+
+@api.on_event("startup")
+async def _ensure_idempotency_ttl():
+    try:
+        await db.idempotency.create_index(
+            "created_at", expireAfterSeconds=86400, name="idem_ttl",
+        )
+    except Exception as e:
+        logger.warning("Could not create idempotency TTL index: %s", e)
 
 
 # Include + CORS

@@ -19,23 +19,44 @@ const TIERRA_API_BASE = "https://tierra-bistro-menu.preview.emergentagent.com";
 const TIERRA_TOKEN = "tierra2024";  // change for production
 
 // ─── Low-level helper ───────────────────────────────────────────────
-async function tierraRequest(path, { method = "GET", body, auth = true } = {}) {
+async function tierraRequest(path, { method = "GET", body, auth = true, idempotencyKey, retries = 2 } = {}) {
     const headers = { "Content-Type": "application/json" };
     if (auth) headers["X-Tierra-Token"] = TIERRA_TOKEN;
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
-    const res = await fetch(`${TIERRA_API_BASE}${path}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw Object.assign(new Error(err?.detail?.message || err.detail || "Request failed"), {
-            status: res.status,
-            data: err,
-        });
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const res = await fetch(`${TIERRA_API_BASE}${path}`, {
+                method,
+                headers,
+                body: body ? JSON.stringify(body) : undefined,
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: res.statusText }));
+                // 4xx → don't retry (except 429)
+                if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+                    throw Object.assign(new Error(err?.detail?.message || err.detail || "Request failed"), {
+                        status: res.status, data: err,
+                    });
+                }
+                throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status, data: err });
+            }
+            return res.json();
+        } catch (e) {
+            lastErr = e;
+            if (e.status && e.status < 500 && e.status !== 429) throw e;
+            if (attempt < retries) {
+                await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+            }
+        }
     }
-    return res.json();
+    throw lastErr;
+}
+
+// ─── Helper: generate a UUID-like idempotency key ───────────────────
+export function newIdempotencyKey() {
+    return "idem-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -72,20 +93,23 @@ export function checkAvailability({ date, time, guests = 1, zone }) {
     return tierraRequest(`/api/reservations/availability?${q.toString()}`, { auth: false });
 }
 
-/** Create a reservation from Tierra OS (auto-confirmed + email + print). */
+/** Create a reservation from Tierra OS (auto-confirmed + email + print).
+ *  Pass `idempotencyKey` to safely retry on network errors without creating duplicates. */
 export function createReservation({
     customer_name, customer_phone, customer_email,
     date, time, guests,
     zone, table_code, notes,
     status = "confirmed", auto_print = true,
-}) {
+    booking_id,
+}, { idempotencyKey } = {}) {
     return tierraRequest("/api/tierra/reservations", {
         method: "POST",
+        idempotencyKey: idempotencyKey || newIdempotencyKey(),
         body: {
             customer_name, customer_phone, customer_email,
             date, time, guests,
             zone, table_code, notes,
-            status, auto_print,
+            status, auto_print, booking_id,
         },
     });
 }
@@ -139,6 +163,35 @@ export function listTableOrders(code, { openOnly = true } = {}) {
 /** Close table on payment — marks all open orders completed + table libero. */
 export function closeTable(code) {
     return tierraRequest(`/api/tables/${code}/close`, { method: "POST" });
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  SYNC — single-call snapshot + pull fallbacks (NEW v2)
+// ════════════════════════════════════════════════════════════════════
+
+/** Single-call sync snapshot.
+ *  Returns: { reservations, tables, open_orders, menu_unavailable, slot_config, server_time, range }
+ *  Use as the polling endpoint for the Tierra OS dashboard (every 30-60s).
+ */
+export function getSyncSnapshot({ daysAhead = 7 } = {}) {
+    return tierraRequest(`/api/tierra/sync-snapshot?days_ahead=${daysAhead}`);
+}
+
+/** Pull orders (delivery / asporto / preordine / tavolo) — fallback when site→OS push isn't available. */
+export function pullOrders({ since, status, serviceType, limit = 200 } = {}) {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (since) q.append("since", since);
+    if (status) q.append("status", Array.isArray(status) ? status.join(",") : status);
+    if (serviceType) q.append("service_type", serviceType);
+    return tierraRequest(`/api/tierra/orders?${q.toString()}`);
+}
+
+/** Manually re-trigger the site→OS push (e.g. after OS downtime). */
+export function replayPush({ type, id }) {
+    return tierraRequest("/api/tierra/sync/replay", {
+        method: "POST",
+        body: { type, id },
+    });
 }
 
 // ════════════════════════════════════════════════════════════════════

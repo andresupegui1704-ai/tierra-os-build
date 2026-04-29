@@ -90,8 +90,23 @@ In `/app/memory/test_credentials.md`
 ## Prioritized Backlog (Phase 2+)
 - **P0** Real Resend API key from user → activate transactional emails
 - **P0** Sunmi printer IP from user → activate receipt printing
+- **P0** Tierra OS push outgoing: configurare `TIERRA_OS_BASE_URL` + creare function Netlify `lark-orders.js`
 - **P1** WhatsApp chatbot + promo giornaliere via Twilio (invio promo ai `marketing_subscribers` attivi)
 - **P1** PayPal integration (Client ID)
-- **P2** Refactor `server.py` (>700 lines) in FastAPI routers
+- **P2** Refactor `server.py` (>1500 lines) in FastAPI routers
+- **P2** Webhook outgoing su transizioni status (es. confirmed → arrived)
+- **P3** SSE/WebSocket realtime invece di polling 30s
 - **P3** Multi-language toggle (IT/EN)
 - **P3** Loyalty program (punti Tierra)
+
+## Sync v2 Tierra OS (added 2026-04-29)
+Sincronizzazione bidirezionale SITE ↔ OS:
+- **Outgoing push (SITE → OS)**: background fire-and-forget verso `lark-prenotazioni.js`/`lark-orders.js` quando si crea reservation/order pubblico. Auto-store di `booking_id` (Lark recordId) sul documento.
+- **Pull endpoints (OS → SITE)**:
+  - `GET /api/tierra/sync-snapshot?days_ahead=N` — single-call snapshot (reservations, tables, open_orders, menu_unavailable, slot_config)
+  - `GET /api/tierra/orders?since=&status=&service_type=&limit=` — pull ordini filtrati
+  - `POST /api/tierra/sync/replay` — ripusha manualmente dopo downtime OS
+- **Idempotency-Key header** su `POST /api/tierra/reservations` (TTL 24h via Mongo TTL index)
+- **SDK aggiornato** (`/app/integrations/tierra_os/tierraApi.js`): auto-retry esponenziale, helper `newIdempotencyKey()`, nuovi metodi `getSyncSnapshot`/`pullOrders`/`replayPush`
+- Modulo `/app/backend/tierra_os_sync.py` configurato via env (`TIERRA_OS_BASE_URL`, `TIERRA_OS_SYNC_ENABLED`)
+- Guida completa in `/app/memory/TIERRA_OS_SYNC_V2.md`
