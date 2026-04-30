@@ -10,7 +10,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Layers, Sparkles } from "lucide-react-native";
 import { apiGet, COLORS, CATEGORY_META } from "../../src/lib/api";
 
@@ -21,6 +21,7 @@ type Album = {
 };
 
 export default function Albums() {
+  const router = useRouter();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -89,7 +90,13 @@ export default function Albums() {
             {albums.map((a) => {
               const meta = CATEGORY_META[a.category] || CATEGORY_META.other;
               return (
-                <View key={a.category} style={styles.albumCard} testID={`album-${a.category}`}>
+                <TouchableOpacity
+                  key={a.category}
+                  style={styles.albumCard}
+                  testID={`album-${a.category}`}
+                  activeOpacity={0.8}
+                  onPress={() => router.push(`/album/${a.category}` as any)}
+                >
                   <View style={[styles.albumImage, { backgroundColor: meta.color + "20" }]}>
                     {meta.image ? (
                       <Image source={{ uri: meta.image }} style={styles.albumBg} resizeMode="cover" />
@@ -100,7 +107,7 @@ export default function Albums() {
                   </View>
                   <Text style={styles.albumLabel}>{meta.label}</Text>
                   <Text style={styles.albumCount}>{a.count} photo{a.count === 1 ? "" : "s"}</Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>

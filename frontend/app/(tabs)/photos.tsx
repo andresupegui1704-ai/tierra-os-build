@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Modal,
+  Animated,
+  Easing,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
@@ -22,6 +25,7 @@ import {
   Zap,
   Copy,
   Wand2,
+  ScanLine,
 } from "lucide-react-native";
 import { apiPost, apiGet, COLORS, PhotoAnalysis, DuplicateGroup, CATEGORY_META } from "../../src/lib/api";
 
@@ -30,6 +34,100 @@ type Photo = {
   uri: string;
   base64?: string;
 };
+
+const SCAN_STEPS = [
+  "Reading EXIF metadata",
+  "Hashing image content",
+  "Analyzing visual features",
+  "Categorizing with AI",
+  "Clustering duplicates",
+  "Ranking quality scores",
+];
+
+function ScanOverlay({ visible }: { visible: boolean }) {
+  const [step, setStep] = useState(0);
+  const pulse = useRef(new Animated.Value(0)).current;
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) {
+      setStep(0);
+      progress.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: SCAN_STEPS.length * 700,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+    const i = setInterval(() => {
+      setStep((s) => (s < SCAN_STEPS.length - 1 ? s + 1 : s));
+    }, 700);
+    return () => {
+      clearInterval(i);
+      loop.stop();
+    };
+  }, [visible, pulse, progress]);
+
+  if (!visible) return null;
+
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
+  const width = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
+
+  return (
+    <Modal visible animationType="fade" transparent statusBarTranslucent>
+      <View style={overlayStyles.backdrop}>
+        <View style={overlayStyles.card}>
+          <Animated.View style={[overlayStyles.iconWrap, { transform: [{ scale }], opacity }]}>
+            <ScanLine color={COLORS.primary} size={36} strokeWidth={2.5} />
+          </Animated.View>
+          <Text style={overlayStyles.title}>Scanning photos…</Text>
+          <Text style={overlayStyles.step} testID="scan-step">{SCAN_STEPS[step]}</Text>
+          <View style={overlayStyles.barTrack}>
+            <Animated.View style={[overlayStyles.barFill, { width }]} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const overlayStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.55)", alignItems: "center", justifyContent: "center", padding: 24 },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 28,
+    alignItems: "center",
+    width: "100%",
+    maxWidth: 340,
+  },
+  iconWrap: {
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center", justifyContent: "center",
+    marginBottom: 16,
+  },
+  title: { fontSize: 20, fontWeight: "800", color: COLORS.textPrimary },
+  step: { fontSize: 14, color: COLORS.textSecondary, marginTop: 6, marginBottom: 18, textAlign: "center" },
+  barTrack: {
+    width: "100%",
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.surfaceSecondary,
+    overflow: "hidden",
+  },
+  barFill: { height: "100%", backgroundColor: COLORS.primary, borderRadius: 3 },
+});
 
 const buzz = (style: "light" | "medium" | "success" | "warn" = "light") => {
   if (Platform.OS === "web") return;
@@ -99,12 +197,18 @@ export default function Photos() {
   const tryDemo = useCallback(async () => {
     setScanning(true);
     buzz("light");
+    const started = Date.now();
     try {
       const data = await apiPost<{
         photos: { id: string; url: string }[];
         analyses: PhotoAnalysis[];
         groups: DuplicateGroup[];
       }>("/photos/demo-scan", {});
+      // Let the scan animation play for at least 3.5s for a nicer feel.
+      const elapsed = Date.now() - started;
+      if (elapsed < 3500) {
+        await new Promise((r) => setTimeout(r, 3500 - elapsed));
+      }
       setPhotos(data.photos.map((p) => ({ id: p.id, uri: p.url })));
       setAnalyses(data.analyses);
       setGroups(data.groups);
@@ -154,6 +258,7 @@ export default function Photos() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      <ScanOverlay visible={scanning} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.overline}>PHOTO CLEANER</Text>

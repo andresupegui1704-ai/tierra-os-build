@@ -448,6 +448,20 @@ async def get_smart_albums():
     return albums
 
 
+@api_router.get("/photos/by-category/{category}")
+async def photos_by_category(category: str):
+    """Return all analyses for a category, enriched with demo photo URLs when available."""
+    url_map = {p["id"]: p["url"] for p in DEMO_PHOTOS}
+    cursor = db.photo_analyses.find({"category": category}, {"_id": 0})
+    items = []
+    async for doc in cursor:
+        items.append({
+            **doc,
+            "url": url_map.get(doc["photo_id"]),
+        })
+    return items
+
+
 # ============ EMAIL ENDPOINTS (DEMO) ============
 @api_router.get("/emails/scan", response_model=List[EmailItem])
 async def scan_emails(user_id: str = "demo"):

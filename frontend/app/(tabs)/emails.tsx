@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,8 +9,10 @@ import {
   Alert,
   RefreshControl,
   Platform,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Swipeable, RectButton } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
 import {
   Mail,
@@ -241,25 +243,58 @@ export default function Emails() {
                 </TouchableOpacity>
                 {items.map((e) => {
                   const isSelected = selected.has(e.id);
+                  const renderRight = (progress: Animated.AnimatedInterpolation<number>) => {
+                    const scale = progress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.7, 1],
+                      extrapolate: "clamp",
+                    });
+                    return (
+                      <View style={styles.swipeAction}>
+                        <Animated.View style={{ transform: [{ scale }], alignItems: "center" }}>
+                          <Text style={styles.swipeActionText}>Delete</Text>
+                        </Animated.View>
+                      </View>
+                    );
+                  };
+                  const onSwipeDelete = async () => {
+                    buzz();
+                    try {
+                      await apiPost("/emails/delete", { user_id: "demo", email_ids: [e.id] });
+                      setEmails((prev) => prev.filter((x) => x.id !== e.id));
+                      setSelected((prev) => {
+                        const n = new Set(prev);
+                        n.delete(e.id);
+                        return n;
+                      });
+                    } catch {}
+                  };
                   return (
-                    <TouchableOpacity
+                    <Swipeable
                       key={e.id}
-                      style={[styles.emailRow, isSelected && styles.emailRowSelected]}
-                      onPress={() => toggle(e.id)}
-                      testID={`email-row-${e.id}`}
+                      renderRightActions={renderRight}
+                      onSwipeableOpen={onSwipeDelete}
+                      overshootRight={false}
+                      friction={2}
                     >
-                      <View style={[styles.checkbox, isSelected && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}>
-                        {isSelected && <Check color="#FFFFFF" size={14} strokeWidth={3} />}
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.emailTopLine}>
-                          <Text style={styles.sender} numberOfLines={1}>{e.sender}</Text>
-                          <Text style={styles.size}>{e.size_kb} KB</Text>
+                      <TouchableOpacity
+                        style={[styles.emailRow, isSelected && styles.emailRowSelected]}
+                        onPress={() => toggle(e.id)}
+                        testID={`email-row-${e.id}`}
+                      >
+                        <View style={[styles.checkbox, isSelected && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}>
+                          {isSelected && <Check color="#FFFFFF" size={14} strokeWidth={3} />}
                         </View>
-                        <Text style={styles.subject} numberOfLines={1}>{e.subject}</Text>
-                        <Text style={styles.preview} numberOfLines={1}>{e.preview}</Text>
-                      </View>
-                    </TouchableOpacity>
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.emailTopLine}>
+                            <Text style={styles.sender} numberOfLines={1}>{e.sender}</Text>
+                            <Text style={styles.size}>{e.size_kb} KB</Text>
+                          </View>
+                          <Text style={styles.subject} numberOfLines={1}>{e.subject}</Text>
+                          <Text style={styles.preview} numberOfLines={1}>{e.preview}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    </Swipeable>
                   );
                 })}
               </View>
@@ -405,4 +440,13 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 6,
   },
   resetBtnText: { color: COLORS.textSecondary, fontWeight: "600", fontSize: 13 },
+  swipeAction: {
+    backgroundColor: COLORS.destructive,
+    justifyContent: "center",
+    alignItems: "flex-end",
+    paddingHorizontal: 24,
+    marginBottom: 8,
+    borderRadius: 14,
+  },
+  swipeActionText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
 });

@@ -192,3 +192,64 @@ def test_record_photo_cleanup_and_reset(client):
     assert r3.status_code == 200
     r4 = client.get(f"{BASE}/stats?user_id=demo")
     assert r4.json()["photos_cleaned"] == 0
+
+
+
+# ====== NEW: DEMO-SCAN + BY-CATEGORY ======
+def test_photos_demo_scan(client):
+    r = client.post(f"{BASE}/photos/demo-scan", json={})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert "photos" in j and "analyses" in j and "groups" in j
+    assert len(j["photos"]) == 7
+    assert len(j["analyses"]) == 7
+    # exactly 1 exact group (selfies) + 2 similar groups (food, documents)
+    exact = [g for g in j["groups"] if g["type"] == "exact"]
+    similar = [g for g in j["groups"] if g["type"] == "similar"]
+    assert len(exact) == 1
+    assert exact[0]["category"] == "selfie"
+    assert len(similar) == 2
+    sim_cats = {g["category"] for g in similar}
+    assert sim_cats == {"food", "document"}
+    for p in j["photos"]:
+        assert p["url"].startswith("http")
+        assert "_id" not in p
+    for a in j["analyses"]:
+        assert "_id" not in a
+        assert a["photo_id"].startswith("demo-")
+
+
+def test_photos_by_category_selfie(client):
+    # ensure seeded
+    client.post(f"{BASE}/photos/demo-scan", json={})
+    r = client.get(f"{BASE}/photos/by-category/selfie")
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    ids = {d["photo_id"] for d in data}
+    assert {"demo-dup-1", "demo-dup-2"} <= ids
+    for d in data:
+        assert "_id" not in d
+        assert d["category"] == "selfie"
+        assert d["url"] and d["url"].startswith("http")
+        assert "label" in d and "features" in d and "content_hash" in d
+        assert "quality_score" in d and "description" in d
+
+
+def test_photos_by_category_food(client):
+    client.post(f"{BASE}/photos/demo-scan", json={})
+    r = client.get(f"{BASE}/photos/by-category/food")
+    assert r.status_code == 200
+    data = r.json()
+    ids = {d["photo_id"] for d in data}
+    assert {"demo-food-1", "demo-food-2"} <= ids
+    for d in data:
+        assert d["category"] == "food"
+        assert d["url"] and "unsplash" in d["url"]
+        assert "_id" not in d
+
+
+def test_photos_by_category_nonexistent(client):
+    r = client.get(f"{BASE}/photos/by-category/nonexistent_xyz")
+    assert r.status_code == 200
+    assert r.json() == []
