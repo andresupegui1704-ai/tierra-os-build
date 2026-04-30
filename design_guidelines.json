@@ -1,0 +1,158 @@
+{
+  "project_name": "CleanMate",
+  "domain": "Productivity & Utility (iOS Mobile App)",
+  "theme": "Light",
+  "archetype": "Swiss & High-Contrast (Archetype 4) infused with Clean Intelligence",
+  "design_philosophy": {
+    "core_principles": [
+      "Liquid Glass Foundation: Use soft translucency and layered depth, not flat blur. Apply 'glassmorphism' selectively to floating controls and active panels, anchored by stark white solid surfaces.",
+      "Stark & Organized: As a cleaning app, the UI must feel deeply organized, decluttered, and premium. Generous negative space.",
+      "Intelligence over Decoration: Do not use decorative gradients. Use stark contrasts and precise typography to convey 'AI efficiency'.",
+      "Native Gestures: Embrace HIG paradigms—swipeable cards for photo cleaning, bottom tab navigation, spring-based micro-interactions."
+    ]
+  },
+  "colors": {
+    "description": "A crisp, trustworthy palette signifying digital hygiene and AI precision.",
+    "background": "#FFFFFF",
+    "surface": "#F8FAFC",
+    "surface_secondary": "#F1F5F9",
+    "primary": "#005BB5",
+    "primary_light": "#E6F0FA",
+    "secondary": "#10B981",
+    "destructive": "#EF4444",
+    "destructive_light": "#FEE2E2",
+    "text_primary": "#020617",
+    "text_secondary": "#64748B",
+    "text_tertiary": "#94A3B8",
+    "border": "#E2E8F0"
+  },
+  "typography": {
+    "font_family": "System (SF Pro)",
+    "rules": {
+      "h1_hero": {
+        "size": 34,
+        "weight": "800",
+        "tracking": 0.5,
+        "color": "#020617"
+      },
+      "h2_section": {
+        "size": 24,
+        "weight": "700",
+        "tracking": 0.3,
+        "color": "#020617"
+      },
+      "h3_card": {
+        "size": 18,
+        "weight": "600",
+        "color": "#020617"
+      },
+      "body_large": {
+        "size": 16,
+        "weight": "400",
+        "line_height": 24,
+        "color": "#64748B"
+      },
+      "body_small": {
+        "size": 14,
+        "weight": "500",
+        "color": "#94A3B8"
+      },
+      "label_overline": {
+        "size": 12,
+        "weight": "700",
+        "text_transform": "uppercase",
+        "tracking": 1.2,
+        "color": "#005BB5"
+      }
+    }
+  },
+  "layout_and_spacing": {
+    "screen_padding": 24,
+    "card_padding": 20,
+    "item_gap": 16,
+    "section_gap": 32,
+    "border_radius": {
+      "small": 8,
+      "medium": 16,
+      "large": 24,
+      "pill": 9999
+    },
+    "shadows": {
+      "soft_card": {
+        "shadowColor": "#020617",
+        "shadowOffset": { "width": 0, "height": 8 },
+        "shadowOpacity": 0.04,
+        "shadowRadius": 24,
+        "elevation": 2
+      },
+      "floating_action": {
+        "shadowColor": "#005BB5",
+        "shadowOffset": { "width": 0, "height": 12 },
+        "shadowOpacity": 0.15,
+        "shadowRadius": 32,
+        "elevation": 8
+      }
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "Pill-shaped (borderRadius: 9999), bg: primary (#005BB5), text: White, font-weight: 700. Provide scale-down animation on press.",
+      "secondary": "Pill-shaped, bg: surface_secondary (#F1F5F9), text: text_primary, font-weight: 600.",
+      "destructive": "Pill-shaped, bg: destructive_light, text: destructive, font-weight: 700."
+    },
+    "cards": {
+      "standard": "bg: #FFFFFF, borderRadius: 24, shadow: soft_card, border: 1px solid #F1F5F9. Used for dashboard summary metrics.",
+      "swipeable_photo": "Large vertical card (approx 80% screen height) for photo review. Image covers top 80%, bottom 20% contains meta info and keep/delete floating buttons.",
+      "smart_album": "Square grid items (2 columns), borderRadius: 16. Image overlay bg: rgba(0,0,0,0.3) for text legibility. Label positioned bottom-left."
+    },
+    "navigation": {
+      "bottom_tab": "BlurView background (glassmorphism: absolute fill, tint: light, intensity: 80). Active icon color: primary, Inactive: text_tertiary.",
+      "header": "Large iOS native style header. Transparent background scrolling into a blurred sticky header. Use standard safe area insets."
+    },
+    "icons": {
+      "library": "lucide-react-native",
+      "stroke_width": 2.5
+    }
+  },
+  "screens": {
+    "onboarding": [
+      {
+        "step": 1,
+        "title": "Spot Duplicates Instantly",
+        "subtitle": "Our AI identifies exact copies and visually similar photos, helping you reclaim gigabytes of space.",
+        "image_key": "onboarding_1"
+      },
+      {
+        "step": 2,
+        "title": "Smart Photo Organization",
+        "subtitle": "Automatically group your gallery into receipts, selfies, food, and more. Keep what matters.",
+        "image_key": "onboarding_2"
+      },
+      {
+        "step": 3,
+        "title": "Declutter Your Inbox",
+        "subtitle": "Connect Gmail to securely find and bulk-delete spam, promotions, and useless old threads.",
+        "image_key": "onboarding_3"
+      }
+    ],
+    "dashboard_home": "Overview of 'Storage Saved'. Large circular progress/donut chart indicating cleanable space. Quick action cards: 'Clean Photos', 'Organize Albums', 'Clean Inbox'.",
+    "photo_cleaner": "Tinder-style swipeable card deck or vertical scroll feed. Each card shows a duplicate set. Actions: 'Keep Best & Delete Rest', 'Keep All'. Smooth animations on action.",
+    "smart_albums": "2-column grid of AI-categorized albums (Screenshots, Documents, Pets, Food). Clicking an album shows a masonry or 3-column grid of photos.",
+    "email_cleaner": "List view of emails grouped by 'Newsletters', 'Promotions', 'Spam'. Swipe-to-delete row interactions. 'Select All' floating action button.",
+    "settings": "Standard iOS grouped list. 'Connected Accounts' (Gmail OAuth toggle). Storage permissions toggle."
+  },
+  "media": {
+    "onboarding_1": "https://images.unsplash.com/photo-1676883344224-2fa5de6025db?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NjZ8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwc3RhY2tlZCUyMHBob3RvcyUyMGFsYnVtfGVufDB8fHx8MTc3NzU3NjA3MXww&ixlib=rb-4.1.0&q=85",
+    "onboarding_2": "https://images.unsplash.com/photo-1567473030492-533b30c5494c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwY2xlYW4lMjBlbWFpbCUyMGVudmVsb3BlfGVufDB8fHx8MTc3NzU3NjA3MXww&ixlib=rb-4.1.0&q=85",
+    "onboarding_3": "https://images.unsplash.com/photo-1597496610123-889e0aab4816?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGdsb3dpbmclMjBibHVlJTIwc3BhcmslMjBpbnRlbGxpZ2VuY2V8ZW58MHx8fHwxNzc3NTc2MDcxfDA&ixlib=rb-4.1.0&q=85",
+    "sample_photo_food": "https://images.unsplash.com/photo-1764397514715-37a966071228?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHw0fHxkZWxpY2lvdXMlMjBnb3VybWV0JTIwZm9vZCUyMHBsYXRlfGVufDB8fHx8MTc3NzU3NjA1OHww&ixlib=rb-4.1.0&q=85",
+    "sample_photo_selfie": "https://images.unsplash.com/photo-1719666993553-0085d8daecce?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1NzZ8MHwxfHNlYXJjaHwyfHxhZXN0aGV0aWMlMjBsaWZlc3R5bGUlMjBwaG90b3xlbnwwfHx8fDE3Nzc1NzYwNTh8MA&ixlib=rb-4.1.0&q=85",
+    "sample_photo_document": "https://images.unsplash.com/photo-1606327054536-e37e655d4f4a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwxfHxjbGVhbiUyMGRvY3VtZW50JTIwb24lMjBkZXNrJTIwbWluaW1hbHxlbnwwfHx8fDE3Nzc1NzYwNzF8MA&ixlib=rb-4.1.0&q=85",
+    "sample_photo_landscape": "https://images.unsplash.com/photo-1645497265285-17096c1a429e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NjZ8MHwxfHNlYXJjaHw0fHxtaW5pbWFsaXN0JTIwc3RhY2tlZCUyMHBob3RvcyUyMGFsYnVtfGVufDB8fHx8MTc3NzU3NjA3MXww&ixlib=rb-4.1.0&q=85"
+  },
+  "testing": {
+    "attributes_required": true,
+    "convention": "data-testid='component-role-name'",
+    "examples": ["data-testid='onboarding-next-button'", "data-testid='home-clean-photos-card'"]
+  }
+}
