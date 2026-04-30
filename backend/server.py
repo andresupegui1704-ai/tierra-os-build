@@ -212,10 +212,122 @@ async def analyze_image_with_ai(image_base64: str, photo_id: str) -> PhotoAnalyz
         )
 
 
+# ============ DEMO PHOTO SET ============
+DEMO_PHOTOS = [
+    # Two "similar" food photos (will group as similar)
+    {
+        "id": "demo-food-1",
+        "url": "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=600&q=70",
+        "category": "food",
+        "label": "Pizza plate",
+        "description": "Top-down shot of a margherita pizza on white plate.",
+        "quality_score": 0.85,
+        "features": ["pizza", "food", "plate", "tomato"],
+        "content_hash": "demo-hash-food-1",
+    },
+    {
+        "id": "demo-food-2",
+        "url": "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&q=70",
+        "category": "food",
+        "label": "Pizza closeup",
+        "description": "Closeup of margherita pizza with basil.",
+        "quality_score": 0.72,
+        "features": ["pizza", "food", "plate", "basil"],
+        "content_hash": "demo-hash-food-2",
+    },
+    # Two exact duplicates (same content_hash)
+    {
+        "id": "demo-dup-1",
+        "url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=70",
+        "category": "selfie",
+        "label": "Selfie",
+        "description": "Portrait selfie.",
+        "quality_score": 0.8,
+        "features": ["face", "portrait", "person", "smile"],
+        "content_hash": "demo-hash-dup",
+    },
+    {
+        "id": "demo-dup-2",
+        "url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=70",
+        "category": "selfie",
+        "label": "Selfie",
+        "description": "Portrait selfie.",
+        "quality_score": 0.75,
+        "features": ["face", "portrait", "person", "smile"],
+        "content_hash": "demo-hash-dup",
+    },
+    # Unique
+    {
+        "id": "demo-landscape",
+        "url": "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=600&q=70",
+        "category": "landscape",
+        "label": "Mountain lake",
+        "description": "Alpine lake surrounded by mountains.",
+        "quality_score": 0.95,
+        "features": ["mountain", "lake", "nature", "sky"],
+        "content_hash": "demo-hash-landscape",
+    },
+    # Two similar documents
+    {
+        "id": "demo-doc-1",
+        "url": "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&q=70",
+        "category": "document",
+        "label": "Receipt",
+        "description": "Paper receipt photo.",
+        "quality_score": 0.6,
+        "features": ["paper", "text", "receipt", "document"],
+        "content_hash": "demo-hash-doc-1",
+    },
+    {
+        "id": "demo-doc-2",
+        "url": "https://images.unsplash.com/photo-1568667256549-094345857637?w=600&q=70",
+        "category": "document",
+        "label": "Invoice",
+        "description": "Printed invoice document.",
+        "quality_score": 0.7,
+        "features": ["paper", "text", "document", "invoice"],
+        "content_hash": "demo-hash-doc-2",
+    },
+]
+
+
 # ============ ROUTES ============
 @api_router.get("/")
 async def root():
     return {"message": "CleanMate API", "version": "1.0.0"}
+
+
+@api_router.post("/photos/demo-scan")
+async def demo_scan():
+    """Return a pre-computed demo scan with analyses + groups + image URLs.
+    Allows showcasing the full duplicate/similar detection flow without AI budget.
+    """
+    analyses = [
+        PhotoAnalyzeResponse(
+            photo_id=p["id"],
+            category=p["category"],
+            label=p["label"],
+            description=p["description"],
+            content_hash=p["content_hash"],
+            quality_score=p["quality_score"],
+            features=p["features"],
+        )
+        for p in DEMO_PHOTOS
+    ]
+    # Persist so Smart Albums show up
+    for a in analyses:
+        await db.photo_analyses.update_one(
+            {"photo_id": a.photo_id},
+            {"$set": a.dict()},
+            upsert=True,
+        )
+    # Reuse grouping logic
+    groups_resp = await find_duplicates(FindDuplicatesRequest(analyses=analyses))
+    return {
+        "photos": [{"id": p["id"], "url": p["url"]} for p in DEMO_PHOTOS],
+        "analyses": [a.dict() for a in analyses],
+        "groups": [g.dict() for g in groups_resp],
+    }
 
 
 @api_router.post("/photos/analyze", response_model=PhotoAnalyzeResponse)

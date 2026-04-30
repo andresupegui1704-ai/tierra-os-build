@@ -83,7 +83,7 @@ export default function Onboarding() {
         renderItem={({ item }) => (
           <View style={[styles.slide, { width }]}>
             <View style={styles.imageWrap}>
-              <Image source={{ uri: item.image }} style={styles.image} />
+              <Image source={{ uri: item.image }} style={styles.image} resizeMode="cover" />
             </View>
             <Text style={styles.title} testID={`onboarding-title-${item.key}`}>{item.title}</Text>
             <Text style={styles.subtitle}>{item.subtitle}</Text>
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 40,
   },
-  image: { width: "100%", height: "100%", resizeMode: "cover" },
+  image: { width: "100%", height: "100%" },
   title: {
     fontSize: 30,
     fontWeight: "800",

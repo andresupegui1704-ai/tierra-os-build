@@ -8,9 +8,11 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
 import {
   ImagePlus,
   Sparkles,
@@ -19,24 +21,35 @@ import {
   RotateCcw,
   Zap,
   Copy,
+  Wand2,
 } from "lucide-react-native";
-import { apiPost, COLORS, PhotoAnalysis, DuplicateGroup, CATEGORY_META } from "../../src/lib/api";
+import { apiPost, apiGet, COLORS, PhotoAnalysis, DuplicateGroup, CATEGORY_META } from "../../src/lib/api";
 
-type PickedPhoto = {
+type Photo = {
   id: string;
   uri: string;
-  base64: string;
-  fileSize: number;
+  base64?: string;
+};
+
+const buzz = (style: "light" | "medium" | "success" | "warn" = "light") => {
+  if (Platform.OS === "web") return;
+  try {
+    if (style === "light") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    else if (style === "medium") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    else if (style === "success") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  } catch {}
 };
 
 export default function Photos() {
-  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([]);
   const [analyses, setAnalyses] = useState<PhotoAnalysis[]>([]);
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [scanning, setScanning] = useState(false);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
   const pick = useCallback(async () => {
+    buzz("light");
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert("Permission needed", "We need access to your photo library to scan for duplicates.");
@@ -50,11 +63,10 @@ export default function Photos() {
       quality: 0.6,
     });
     if (res.canceled) return;
-    const picked: PickedPhoto[] = res.assets.map((a, i) => ({
+    const picked: Photo[] = res.assets.map((a, i) => ({
       id: a.assetId || `p-${Date.now()}-${i}`,
       uri: a.uri,
       base64: a.base64 || "",
-      fileSize: a.fileSize || 0,
     }));
     setPhotos(picked);
     setAnalyses([]);
@@ -65,24 +77,51 @@ export default function Photos() {
   const scan = useCallback(async () => {
     if (photos.length === 0) return;
     setScanning(true);
+    buzz("light");
     try {
       const batch = photos
         .filter((p) => p.base64)
-        .map((p) => ({ image_base64: p.base64, photo_id: p.id }));
+        .map((p) => ({ image_base64: p.base64!, photo_id: p.id }));
       const result = await apiPost<PhotoAnalysis[]>("/photos/batch-analyze", { photos: batch });
       setAnalyses(result);
       const grp = await apiPost<DuplicateGroup[]>("/photos/find-duplicates", { analyses: result });
       setGroups(grp);
+      buzz("success");
     } catch (e) {
       console.warn("scan failed", e);
+      buzz("warn");
       Alert.alert("Scan failed", "Could not analyze images. Please try again.");
     } finally {
       setScanning(false);
     }
   }, [photos]);
 
+  const tryDemo = useCallback(async () => {
+    setScanning(true);
+    buzz("light");
+    try {
+      const data = await apiPost<{
+        photos: { id: string; url: string }[];
+        analyses: PhotoAnalysis[];
+        groups: DuplicateGroup[];
+      }>("/photos/demo-scan", {});
+      setPhotos(data.photos.map((p) => ({ id: p.id, uri: p.url })));
+      setAnalyses(data.analyses);
+      setGroups(data.groups);
+      setDeletedIds(new Set());
+      buzz("success");
+    } catch (e) {
+      console.warn(e);
+      buzz("warn");
+      Alert.alert("Demo failed", "Could not load demo scan.");
+    } finally {
+      setScanning(false);
+    }
+  }, []);
+
   const deleteGroup = useCallback(
     async (group: DuplicateGroup) => {
+      buzz("medium");
       const toDelete = group.photo_ids.filter((id) => id !== group.recommended_keep);
       const newDeleted = new Set(deletedIds);
       toDelete.forEach((id) => newDeleted.add(id));
@@ -108,8 +147,8 @@ export default function Photos() {
     g.photo_ids.some((id) => !deletedIds.has(id))
   );
   const totalReclaimable = activeGroups.reduce((s, g) => {
-    const aliveInGroup = g.photo_ids.filter((id) => !deletedIds.has(id)).length;
-    if (aliveInGroup <= 1) return s;
+    const alive = g.photo_ids.filter((id) => !deletedIds.has(id)).length;
+    if (alive <= 1) return s;
     return s + g.space_mb;
   }, 0);
 
@@ -119,22 +158,40 @@ export default function Photos() {
         <View style={styles.header}>
           <Text style={styles.overline}>PHOTO CLEANER</Text>
           <Text style={styles.h1}>Find duplicates</Text>
-          <Text style={styles.sub}>Pick photos from your library, AI will group duplicates and similar shots.</Text>
+          <Text style={styles.sub}>Pick photos or try a demo scan to see how AI groups duplicates and similar shots.</Text>
         </View>
 
         {photos.length === 0 ? (
-          <TouchableOpacity style={styles.pickerCard} onPress={pick} testID="photos-pick-btn">
-            <View style={styles.pickerIcon}>
-              <ImagePlus color={COLORS.primary} size={28} strokeWidth={2.5} />
-            </View>
-            <Text style={styles.pickerTitle}>Select photos</Text>
-            <Text style={styles.pickerSub}>Up to 10 photos per scan</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.pickerCard} onPress={pick} testID="photos-pick-btn">
+              <View style={styles.pickerIcon}>
+                <ImagePlus color={COLORS.primary} size={28} strokeWidth={2.5} />
+              </View>
+              <Text style={styles.pickerTitle}>Select photos</Text>
+              <Text style={styles.pickerSub}>Up to 10 photos per scan</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.demoBtn}
+              onPress={tryDemo}
+              disabled={scanning}
+              testID="photos-demo-btn"
+            >
+              {scanning ? (
+                <ActivityIndicator color={COLORS.primary} />
+              ) : (
+                <>
+                  <Wand2 color={COLORS.primary} size={18} strokeWidth={2.5} />
+                  <Text style={styles.demoBtnText}>Try demo scan</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </>
         ) : (
           <View style={styles.thumbsRow}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
               {photos.map((p) => (
-                <Image key={p.id} source={{ uri: p.uri }} style={styles.thumb} />
+                <Image key={p.id} source={{ uri: p.uri }} style={styles.thumb} resizeMode="cover" />
               ))}
             </ScrollView>
           </View>
@@ -159,8 +216,17 @@ export default function Photos() {
         )}
 
         {photos.length > 0 && (
-          <TouchableOpacity style={styles.secondaryBtn} onPress={pick} testID="photos-pick-more-btn">
-            <Text style={styles.secondaryBtnText}>Pick different photos</Text>
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={() => {
+              setPhotos([]);
+              setAnalyses([]);
+              setGroups([]);
+              setDeletedIds(new Set());
+            }}
+            testID="photos-clear-btn"
+          >
+            <Text style={styles.secondaryBtnText}>Clear & start over</Text>
           </TouchableOpacity>
         )}
 
@@ -217,7 +283,7 @@ export default function Photos() {
                   const isKeep = id === g.recommended_keep;
                   return (
                     <View key={id} style={styles.groupPhotoWrap}>
-                      {uri && <Image source={{ uri }} style={styles.groupPhoto} />}
+                      {uri && <Image source={{ uri }} style={styles.groupPhoto} resizeMode="cover" />}
                       {isKeep && (
                         <View style={styles.keepBadge}>
                           <Check color="#FFFFFF" size={14} strokeWidth={3} />
@@ -246,7 +312,10 @@ export default function Photos() {
         {deletedIds.size > 0 && (
           <TouchableOpacity
             style={styles.secondaryBtn}
-            onPress={() => setDeletedIds(new Set())}
+            onPress={() => {
+              buzz("light");
+              setDeletedIds(new Set());
+            }}
             testID="photos-undo-btn"
           >
             <RotateCcw color={COLORS.textSecondary} size={16} strokeWidth={2.5} />
@@ -259,6 +328,17 @@ export default function Photos() {
     </SafeAreaView>
   );
 }
+
+const shadow = Platform.select({
+  web: { boxShadow: "0 8px 16px rgba(0,91,181,0.25)" as any },
+  default: {
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
@@ -277,8 +357,8 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 40,
-    marginBottom: 20,
+    paddingVertical: 36,
+    marginBottom: 12,
   },
   pickerIcon: {
     width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.primaryLight,
@@ -286,6 +366,17 @@ const styles = StyleSheet.create({
   },
   pickerTitle: { fontSize: 18, fontWeight: "700", color: COLORS.textPrimary },
   pickerSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4 },
+  demoBtn: {
+    backgroundColor: COLORS.primaryLight,
+    paddingVertical: 14,
+    borderRadius: 9999,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginBottom: 20,
+  },
+  demoBtnText: { color: COLORS.primary, fontWeight: "700", fontSize: 14 },
   thumbsRow: { marginBottom: 16 },
   thumb: { width: 76, height: 76, borderRadius: 14, backgroundColor: COLORS.surfaceSecondary },
   primaryBtn: {
@@ -297,11 +388,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     marginTop: 8,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
+    ...shadow,
   },
   primaryBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
   secondaryBtn: {

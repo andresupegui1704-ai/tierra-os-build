@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
@@ -22,9 +23,10 @@ type Album = {
 export default function Albums() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!refreshing) setLoading(true);
     try {
       const data = await apiGet<Album[]>("/photos/albums");
       setAlbums(data);
@@ -32,8 +34,9 @@ export default function Albums() {
       console.warn(e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, []);
+  }, [refreshing]);
 
   useEffect(() => {
     load();
@@ -47,7 +50,20 @@ export default function Albums() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              load();
+            }}
+            tintColor={COLORS.primary}
+          />
+        }
+      >
         <View style={styles.header}>
           <Text style={styles.overline}>SMART ALBUMS</Text>
           <Text style={styles.h1}>AI folders</Text>
@@ -76,7 +92,7 @@ export default function Albums() {
                 <View key={a.category} style={styles.albumCard} testID={`album-${a.category}`}>
                   <View style={[styles.albumImage, { backgroundColor: meta.color + "20" }]}>
                     {meta.image ? (
-                      <Image source={{ uri: meta.image }} style={styles.albumBg} />
+                      <Image source={{ uri: meta.image }} style={styles.albumBg} resizeMode="cover" />
                     ) : null}
                     <View style={styles.albumOverlay}>
                       <Sparkles color="#FFFFFF" size={18} strokeWidth={2.5} />
@@ -121,7 +137,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     marginBottom: 8,
   },
-  albumBg: { position: "absolute", width: "100%", height: "100%", resizeMode: "cover", opacity: 0.9 },
+  albumBg: { position: "absolute", width: "100%", height: "100%", opacity: 0.9 },
   albumOverlay: {
     position: "absolute",
     top: 10,

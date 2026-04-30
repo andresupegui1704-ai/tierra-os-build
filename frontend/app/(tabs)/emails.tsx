@@ -7,8 +7,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  RefreshControl,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import {
   Mail,
   Trash2,
@@ -47,8 +50,15 @@ const CATEGORY_ICON: Record<EmailItem["category"], React.ReactNode> = {
 export default function Emails() {
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+
+  const buzz = () => {
+    if (Platform.OS !== "web") {
+      try { Haptics.selectionAsync(); } catch {}
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,6 +70,7 @@ export default function Emails() {
       console.warn(e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -75,6 +86,7 @@ export default function Emails() {
   }, [emails]);
 
   const toggle = (id: string) => {
+    buzz();
     const n = new Set(selected);
     if (n.has(id)) n.delete(id);
     else n.add(id);
@@ -82,6 +94,7 @@ export default function Emails() {
   };
 
   const selectCategory = (cat: EmailItem["category"]) => {
+    buzz();
     const n = new Set(selected);
     const ids = grouped[cat].map((e) => e.id);
     const allIn = ids.every((i) => n.has(i));
@@ -91,6 +104,7 @@ export default function Emails() {
   };
 
   const selectAllJunk = () => {
+    buzz();
     const n = new Set<string>();
     (["spam", "promotions", "newsletters", "social"] as const).forEach((c) => {
       grouped[c].forEach((e) => n.add(e.id));
@@ -156,7 +170,20 @@ export default function Emails() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              load();
+            }}
+            tintColor={COLORS.primary}
+          />
+        }
+      >
         <View style={styles.header}>
           <Text style={styles.overline}>EMAIL CLEANER</Text>
           <Text style={styles.h1}>Declutter inbox</Text>
