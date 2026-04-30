@@ -1,0 +1,40 @@
+{
+  "summary": "Full testing of CleanMate MVP. Backend: 13/13 pytest tests PASS (root, stats, gmail/status, emails scan/delete/reset, photos analyze/batch-analyze/find-duplicates exact & similar, albums, stats record/reset). Frontend: All tab navigation works, all testIDs render correctly, home stats card, emails grouping (5 categories with 18 demo emails, 16 junk), select-all-junk activates FAB with Delete, Settings (Gmail row, Haptic/AutoScan switches, Reset), Photos 'Select photos' picker card, Albums screen. No red-screen errors.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/photos/analyze & /api/photos/batch-analyze", "issue": "EMERGENT_LLM_KEY budget exceeded — backend logs show 'Budget has been exceeded! Current cost: 0.00263875, Max budget: 0.001'. AI calls fail and fallback path returns category='other', label='Photo', quality_score=0.5, features=[]. This silently degrades the core CleanMate value prop (AI categorization + similar grouping won't work since features are empty and category is excluded for 'other'). User must top up the EMERGENT_LLM_KEY budget.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "onboarding.tsx", "issue": "Next button's FlatList.scrollToIndex does not advance slides on RN-web (slide stays at index 0 after tapping Next). Skip button works fine and final 'Start Cleaning' tap on last slide should navigate, but users can't reach last slide via Next on web. Likely works on iOS native. Consider adding onPress fallback that uses scrollTo({x: (index+1)*width}) or a manual offset-based approach.", "testID": "onboarding-next-btn", "priority": "MEDIUM"},
+      {"component": "emails.tsx delete confirm", "issue": "Alert.alert multi-button confirm dialog doesn't render a native browser dialog on RN-web — tapping Delete in web preview does not show the confirmation modal, so delete is not triggered (junk count unchanged after tap). This is a web-only limitation; on iOS device the Alert will show normally. For web parity consider using a custom Modal-based confirm.", "testID": "emails-delete-btn", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Home / global", "issues": ["Multiple 'shadow*' style props deprecation warnings in console — consider migrating to boxShadow for RN 0.76+ compatibility.", "Image style.resizeMode deprecated warnings — move resizeMode from style to prop in onboarding.tsx (image style) and albums.tsx (albumBg)."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "(Optional) Fix onboarding Next button for web: FlatList.scrollToIndex is not reliable in react-native-web. Use listRef.current?.scrollToOffset({ offset: (index+1)*width, animated: true }) instead, or drive slides with setState + translateX. Native iOS is expected to work but web preview testing is blocked past slide 1.",
+    "(Optional) Replace Alert.alert multi-button delete confirmation with a cross-platform Modal for web preview parity.",
+    "(Polish) Resolve deprecation warnings: migrate shadow* to boxShadow, move Image resizeMode from style to prop.",
+    "Remove stale TEST_ photo_analyses docs from DB if desired (backend tests populated /api/photos/albums with an 'other' bucket of 4 TEST photos; Albums tab will therefore no longer show the empty state until cleaned)."
+  ],
+  "critical_code_review_comments": [
+    "server.py: Pydantic .dict() is deprecated in v2; prefer .model_dump(). Not blocking.",
+    "server.py: delete_emails / reset_emails / record_photo_cleanup / reset_stats accept Dict without Pydantic model — works but bypasses validation. Consider typed request models.",
+    "api.ts uses process.env.EXPO_PUBLIC_BACKEND_URL which matches frontend/.env correctly. Note: system prompt references EXPO_BACKEND_URL but .env actually exposes EXPO_PUBLIC_BACKEND_URL (required by Expo for client-side env). Current setup is correct.",
+    "find-duplicates 'similar' logic groups only when features overlap >=2 AND skips category='other'; good."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py (new)"],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "seed_data_creation": "Backend tests created 4 TEST_ photo_analyses docs (TEST_p1, TEST_dup1, TEST_dup2, TEST_diff) all categorised as 'other', populating /api/photos/albums with 1 album {category: other, count: 4}. user_stats and deleted_emails for user_id=demo are reset to clean state at end of tests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All backend endpoints verified via /app/backend/tests/backend_test.py (pytest, 13 tests, 100% pass). For frontend: use Skip on onboarding to reach tabs (Next is broken on RN-web only). Emails delete confirmation Alert.alert is web-incompatible (multi-button); test via direct API or on native. Image picker cannot be exercised in headless browser — only verify 'Select photos' card presence. Albums currently has 1 'other' album from seed backend tests; reset with: mongo> db.photo_analyses.deleteMany({photo_id:{$regex:/^TEST_/}}).",
+  "rca_of_issue": "Onboarding Next no-op on web: FlatList.scrollToIndex implementation in react-native-web does not reliably scroll a pagingEnabled horizontal list; animate frame is skipped when items are not yet laid out. Emails delete no-op on web: react-native-web's Alert.alert with multiple buttons does not render a browser dialog (only single-button alerts map to window.alert). Both affect web preview only; native iOS build should behave correctly."
+}
