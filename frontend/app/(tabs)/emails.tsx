@@ -100,6 +100,13 @@ export default function Emails() {
 
   const confirmDelete = () => {
     if (selected.size === 0) return;
+    if (typeof window !== "undefined" && typeof (window as any).confirm === "function") {
+      const ok = (window as any).confirm(
+        `Move ${selected.size} email${selected.size === 1 ? "" : "s"} to trash?`
+      );
+      if (ok) doDelete();
+      return;
+    }
     Alert.alert(
       "Delete emails",
       `Move ${selected.size} email${selected.size === 1 ? "" : "s"} to trash?`,

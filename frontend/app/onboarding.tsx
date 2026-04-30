@@ -55,7 +55,7 @@ export default function Onboarding() {
 
   const next = () => {
     if (index < SLIDES.length - 1) {
-      listRef.current?.scrollToIndex({ index: index + 1, animated: true });
+      listRef.current?.scrollToOffset({ offset: (index + 1) * width, animated: true });
     } else {
       router.replace("/(tabs)");
     }
