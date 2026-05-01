@@ -7,7 +7,7 @@ const LARK_APP_ID = process.env.LARK_APP_ID;
 const LARK_APP_SECRET = process.env.LARK_APP_SECRET;
 const LARK_BASE_ID = process.env.LARK_BASE_ID;
 
-const LARK_HOST = 'https://open.larksuite.com';
+const LARK_HOST = 'https://open.jp.larksuite.com';
 const FEISHU_HOST = 'https://open.feishu.cn';
 
 let tokenCache = { token: null, expiresAt: 0, host: null };
