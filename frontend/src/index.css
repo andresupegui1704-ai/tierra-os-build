@@ -55,27 +55,7 @@ html, body {
     background: linear-gradient(135deg, #F5EFE2 0%, #EADFC9 100%);
 }
 
-/* Subtle stamp/ring around logo in hero */
-.logo-stamp {
-    position: relative;
-    display: inline-block;
-}
-.logo-stamp::before {
-    content: '';
-    position: absolute;
-    inset: -28px;
-    border: 1px solid rgba(138, 91, 61, 0.22);
-    border-radius: 9999px;
-    pointer-events: none;
-}
-.logo-stamp::after {
-    content: '';
-    position: absolute;
-    inset: -44px;
-    border: 1px dashed rgba(138, 91, 61, 0.15);
-    border-radius: 9999px;
-    pointer-events: none;
-}
+/* Logo stamp removed per client request — logo stands alone */
 
 @layer base {
     :root {

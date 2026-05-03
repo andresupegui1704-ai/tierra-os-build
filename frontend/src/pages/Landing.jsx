@@ -49,9 +49,7 @@ const Landing = () => {
                         transition={{ duration: 1, ease: "easeOut" }}
                         className="mt-10 flex justify-center"
                     >
-                        <div className="logo-stamp">
-                            <img src={LOGO} alt="Tierra Organic Bistrot Café" className="h-56 sm:h-72 w-auto" />
-                        </div>
+                        <img src={LOGO} alt="Tierra Organic Bistrot Café" className="h-56 sm:h-72 w-auto" />
                     </motion.div>
 
                     <motion.h1
@@ -60,8 +58,8 @@ const Landing = () => {
                         transition={{ duration: 0.8, delay: 0.4 }}
                         className="h-display text-4xl sm:text-5xl lg:text-6xl mt-12 text-[#2C2418] leading-[1.1]"
                     >
-                        Benvenuti da <span className="italic text-[#8A5B3D]">Tierra</span>,
-                        <br/>un bistrot biologico <span className="italic text-[#7C9A4A]">che sa di casa</span>
+                        Benvenuti da <span className="italic">Tierra</span>,
+                        <br/>un bistrot biologico <span className="italic">che sa di casa</span>
                         <br/>con prodotti assolutamente organici.
                     </motion.h1>
                     <motion.p
@@ -97,12 +95,102 @@ const Landing = () => {
                     </motion.div>
                 </div>
 
-                {/* Ticker bar */}
-                <div className="border-y border-[#8A5B3D]/20 bg-[#EADFC9]/60">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap justify-center gap-x-10 gap-y-2">
-                        {["100% biologico", "Farm-to-table", "Ingredienti di stagione", "Poke & Ceviche", "Aperitierra 18 – 20"].map((t) => (
-                            <span key={t} className="overline">✦ {t}</span>
-                        ))}
+                {/* INFO LOCALE — scenografica, sotto la hero */}
+                <div className="border-t border-[#8A5B3D]/15 bg-[#EADFC9]/40">
+                    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
+                        <div className="text-center mb-10">
+                            <span className="ornament overline">Ti aspettiamo</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 sm:gap-12">
+                            {/* Indirizzo */}
+                            <motion.a
+                                href={BRAND.links.mapsDirections}
+                                target="_blank" rel="noreferrer"
+                                data-testid="hero-info-address"
+                                initial={{ opacity: 0, y: 16 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ duration: 0.6 }}
+                                className="text-center group"
+                            >
+                                <MapPin size={22} strokeWidth={1.2} className="mx-auto text-[#8A5B3D] group-hover:scale-110 transition-transform" />
+                                <p className="overline mt-5 text-[#8A5B3D]">Dove siamo</p>
+                                <p className="font-serif text-2xl mt-3 text-[#2C2418]">{BRAND.address.street}</p>
+                                <p className="text-sm text-[#5C4E3C] mt-1">{BRAND.address.city}</p>
+                                <p className="text-xs mt-4 text-[#8A5B3D] underline-offset-4 group-hover:underline">Indicazioni →</p>
+                            </motion.a>
+
+                            {/* Orari */}
+                            <motion.div
+                                initial={{ opacity: 0, y: 16 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ duration: 0.6, delay: 0.1 }}
+                                className="text-center md:border-x md:border-[#8A5B3D]/15 md:px-6"
+                            >
+                                <Clock size={22} strokeWidth={1.2} className="mx-auto text-[#8A5B3D]" />
+                                <p className="overline mt-5 text-[#8A5B3D]">Orari</p>
+                                <ul className="font-serif text-lg mt-3 text-[#2C2418] space-y-1">
+                                    {BRAND.hours.map((h) => (
+                                        <li key={h.days}>
+                                            <span className="text-[#5C4E3C] text-sm font-sans tracking-wide">{h.days}</span>
+                                            <span className="mx-2 text-[#8A5B3D]/40">·</span>
+                                            {h.time}
+                                        </li>
+                                    ))}
+                                </ul>
+                                {BRAND.specialHours && (
+                                    <p className="text-xs mt-4 text-[#7C9A4A]">
+                                        {BRAND.specialHours.label} · {BRAND.specialHours.time}
+                                    </p>
+                                )}
+                            </motion.div>
+
+                            {/* Contatti */}
+                            <motion.div
+                                initial={{ opacity: 0, y: 16 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ duration: 0.6, delay: 0.2 }}
+                                className="text-center"
+                            >
+                                <MessageCircle size={22} strokeWidth={1.2} className="mx-auto text-[#8A5B3D]" />
+                                <p className="overline mt-5 text-[#8A5B3D]">Scrivici</p>
+                                <a
+                                    href={waLink()}
+                                    target="_blank" rel="noreferrer"
+                                    data-testid="hero-info-whatsapp"
+                                    className="block font-serif text-2xl mt-3 text-[#2C2418] hover:text-[#7C9A4A] transition-colors"
+                                >
+                                    {BRAND.phone.display}
+                                </a>
+                                <p className="text-sm text-[#5C4E3C] mt-1">WhatsApp · telefono</p>
+                                {BRAND.links.instagram && (
+                                    <a
+                                        href={BRAND.links.instagram}
+                                        target="_blank" rel="noreferrer"
+                                        data-testid="hero-info-instagram"
+                                        className="inline-flex items-center gap-1.5 text-xs mt-4 text-[#8A5B3D] underline-offset-4 hover:underline"
+                                    >
+                                        <Instagram size={12} /> {BRAND.links.instagramHandle}
+                                    </a>
+                                )}
+                            </motion.div>
+                        </div>
+
+                        {/* Subtle brand hallmarks — no longer masquerading as links */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            whileInView={{ opacity: 1 }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 0.8, delay: 0.3 }}
+                            className="mt-14 pt-8 border-t border-[#8A5B3D]/15 flex flex-wrap justify-center gap-x-8 gap-y-2 text-[#8A5B3D]/70"
+                        >
+                            {["100% Biologico", "Farm-to-table", "Ingredienti di stagione", "Poke & Ceviche"].map((t) => (
+                                <span key={t} className="text-xs tracking-[0.18em] uppercase">✦ {t}</span>
+                            ))}
+                        </motion.div>
                     </div>
                 </div>
             </section>
@@ -133,7 +221,7 @@ const Landing = () => {
                     <div className="md:col-span-5">
                         <p className="overline">La nostra storia</p>
                         <h2 className="h-display text-4xl sm:text-5xl mt-4 text-[#2C2418]">
-                            Una cucina che <span className="italic text-[#8A5B3D]">ascolta</span> la stagione.
+                            Una cucina che <span className="italic">ascolta</span> la stagione.
                         </h2>
                     </div>
                     <div className="md:col-span-7 md:col-start-7">
@@ -264,7 +352,7 @@ const Landing = () => {
                 <div>
                     <p className="overline">Delivery · Asporto · Sul posto</p>
                     <h2 className="h-display text-4xl sm:text-5xl mt-4">
-                        Ordina come <span className="italic text-[#8A5B3D]">preferisci</span>.
+                        Ordina come <span className="italic">preferisci</span>.
                     </h2>
                     <p className="mt-6 text-[#5C4E3C] leading-relaxed">
                         Preferisci mangiare a casa? Fare un salto veloce a ritirare? O prenotare un tavolo
