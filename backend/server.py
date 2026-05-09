@@ -1349,6 +1349,127 @@ async def ai_analyze_invoice(
     return result
 
 
+# ---------- Tierra OS — global option toggle (cascade across all dishes) ----------
+@api.patch("/tierra/options/availability")
+async def tierra_toggle_option(
+    payload: dict,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Toggle availability of a customization option globally across ALL menu items.
+
+    Use case: cameriere su Tierra OS "spegne" `Polpetta al Sugo` → automaticamente
+    sparisce dalle scelte di TUTTE le bowls e Tierra Plate, e i piatti che la
+    contengono come UNICA opzione disponibile diventano `available=false`.
+
+    Body:
+    {
+        "option_name": "Polpetta al Sugo",   # required (case-insensitive match)
+        "available": false,                  # required
+        "group_name": "Proteina"             # optional, restringe a un singolo gruppo
+    }
+
+    Response: { ok, option, available, items_updated, items_disabled }
+    """
+    name = (payload.get("option_name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="option_name richiesto")
+    if "available" not in payload:
+        raise HTTPException(status_code=400, detail="available richiesto")
+    available = bool(payload["available"])
+    group_filter = (payload.get("group_name") or "").strip().lower() or None
+
+    # Toggle in all menu_items.customization_groups[*].options[*] matching by name
+    items = await db.menu_items.find({}, {"_id": 0}).to_list(500)
+    items_updated = 0
+    items_disabled: list = []
+    items_enabled: list = []
+
+    for item in items:
+        groups = item.get("customization_groups") or []
+        changed = False
+        for g in groups:
+            if group_filter and g.get("name", "").lower() != group_filter:
+                continue
+            for opt in g.get("options") or []:
+                if str(opt.get("name", "")).strip().lower() == name.lower():
+                    if opt.get("available") != available:
+                        opt["available"] = available
+                        changed = True
+
+        if not changed:
+            continue
+        items_updated += 1
+
+        # Cascade rule: if this item has at least one REQUIRED group with NO available options,
+        # mark the item as unavailable. Re-enable the item if all required groups have ≥1 available
+        # option AND it was previously auto-disabled (we don't override manual disables).
+        has_empty_required = False
+        for g in groups:
+            if g.get("required"):
+                opts_avail = [o for o in (g.get("options") or []) if o.get("available", True)]
+                if not opts_avail:
+                    has_empty_required = True
+                    break
+
+        new_available = item.get("available", True)
+        if has_empty_required and item.get("available", True):
+            new_available = False
+            items_disabled.append(item.get("name"))
+        elif (not has_empty_required) and (not item.get("available", True)) and item.get("auto_disabled"):
+            # Re-enable only if previously auto-disabled (not manually)
+            new_available = True
+            items_enabled.append(item.get("name"))
+
+        update_fields = {"customization_groups": groups}
+        if new_available != item.get("available", True):
+            update_fields["available"] = new_available
+            update_fields["auto_disabled"] = (not new_available)
+
+        await db.menu_items.update_one({"id": item["id"]}, {"$set": update_fields})
+
+    logger.info(
+        "Tierra option toggle: option='%s' available=%s items_updated=%s disabled=%s enabled=%s",
+        name, available, items_updated, items_disabled, items_enabled,
+    )
+    return {
+        "ok": True,
+        "option": name,
+        "available": available,
+        "group_name": group_filter,
+        "items_updated": items_updated,
+        "items_disabled": items_disabled,
+        "items_enabled": items_enabled,
+    }
+
+
+@api.get("/tierra/options")
+async def tierra_list_options(_: bool = Depends(_require_tierra_token)):
+    """Return all unique customization options across the menu, with current availability.
+
+    Useful to render the toggle UI on Tierra OS without polling each dish.
+    """
+    items = await db.menu_items.find({}, {"_id": 0, "customization_groups": 1, "name": 1}).to_list(500)
+    seen: dict = {}  # key: (group, option_name) → {group, name, price_delta, available, used_in: [...]}
+    for it in items:
+        for g in (it.get("customization_groups") or []):
+            for o in (g.get("options") or []):
+                key = (g.get("name", ""), o.get("name", ""))
+                if key not in seen:
+                    seen[key] = {
+                        "group_name": g.get("name"),
+                        "option_name": o.get("name"),
+                        "price_delta": o.get("price_delta", 0),
+                        "available": o.get("available", True),
+                        "tag": o.get("tag"),
+                        "description": o.get("description"),
+                        "used_in": [],
+                    }
+                seen[key]["used_in"].append(it.get("name"))
+                # If any item shows it as unavailable, surface that
+                seen[key]["available"] = seen[key]["available"] and o.get("available", True)
+    return {"ok": True, "count": len(seen), "options": list(seen.values())}
+
+
 @api.patch("/menu/availability")
 async def patch_menu_availability(
     payload: dict,

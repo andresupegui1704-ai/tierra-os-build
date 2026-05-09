@@ -261,6 +261,27 @@ export function notifyOrderPaid({ order_id, table_code, amount, payment_method =
 }
 
 // ════════════════════════════════════════════════════════════════════
+//  CUSTOMIZATION OPTIONS — proteine/extra globali (toggle on/off)
+// ════════════════════════════════════════════════════════════════════
+
+/** List all unique customization options across the menu (with availability + tag). */
+export function listOptions() {
+    return tierraRequest("/api/tierra/options");
+}
+
+/** Toggle availability of a customization option globally.
+ *  When an option is disabled, it disappears from all dishes that include it.
+ *  Items where ALL options of a REQUIRED group become unavailable are auto-disabled.
+ *  Re-enabling at least one option re-enables the auto-disabled items.
+ */
+export function toggleOption(optionName, available, groupName = null) {
+    return tierraRequest("/api/tierra/options/availability", {
+        method: "PATCH",
+        body: { option_name: optionName, available, group_name: groupName },
+    });
+}
+
+// ════════════════════════════════════════════════════════════════════
 //  TABLES — variant Tierra-namespaced (P1.1)
 // ════════════════════════════════════════════════════════════════════
 

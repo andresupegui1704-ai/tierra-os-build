@@ -20,6 +20,7 @@ class CustomizationOption(BaseModel):
     price_delta: float = 0.0
     description: Optional[str] = None
     available: bool = True
+    tag: Optional[str] = None  # e.g. "carne", "pesce", "vegan"
 
 
 class CustomizationGroup(BaseModel):
