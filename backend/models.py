@@ -72,11 +72,12 @@ class MenuItem(BaseModel):
     price: float
     image_url: Optional[str] = None
     image_alt: Optional[str] = None
-    badge: Optional[str] = None  # e.g. "Il più scelto", "Consigliato dallo Chef"
+    badge: Optional[str] = None  # e.g. "Signature", "Chef's Choice", "Vegan"
     available: bool = True
     order: int = 0
     customization_groups: List[CustomizationGroup] = Field(default_factory=list)
     is_special: bool = False
+    tags: List[str] = Field(default_factory=list)  # allergens: G, L, E, N, F, S
 
 
 class MenuItemUpdate(BaseModel):

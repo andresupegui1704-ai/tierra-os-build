@@ -115,8 +115,8 @@ async def _ensure_customizations():
             )
             logger.info(f"Customizations v{CUSTOMIZATION_VERSION} applied to: {it['name']}")
 
-    await apply(["Poke Media Bowl", "Poke Grande Bowl"], bowl_groups)
-    await apply(["Secondo con Contorno"], secondo_groups)
+    await apply(["Medium Bowl — Create Your Bowl", "Large Bowl — Create Your Bowl"], bowl_groups)
+    await apply(["Tierra Plate"], secondo_groups)
 
 
 @app.on_event("shutdown")

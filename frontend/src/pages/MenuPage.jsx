@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import MenuCard from "../components/MenuCard";
+import MenuRow from "../components/MenuRow";
 import SpecialsBanner from "../components/SpecialsBanner";
 import { ReviewCTACard, ReviewCTABanner } from "../components/ReviewCTA";
 
@@ -11,7 +11,6 @@ const MenuPage = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Initial fetch
         Promise.all([api.get("/menu/categories"), api.get("/menu/items")])
             .then(([c, i]) => {
                 setCategories(c.data);
@@ -20,16 +19,11 @@ const MenuPage = () => {
             })
             .finally(() => setLoading(false));
 
-        // Near real-time polling: re-fetch items every 20s so that
-        // availability updates from Tierra OS / Lark Base appear without refresh.
-        // Skipped when tab is hidden to save bandwidth.
+        // Live availability sync from Tierra OS — every 20s when tab is visible
         const interval = setInterval(() => {
             if (document.hidden) return;
-            api.get("/menu/items")
-                .then((r) => setItems(r.data))
-                .catch(() => { /* silent */ });
+            api.get("/menu/items").then((r) => setItems(r.data)).catch(() => {});
         }, 20000);
-
         return () => clearInterval(interval);
     }, []);
 
@@ -38,50 +32,60 @@ const MenuPage = () => {
 
     return (
         <div data-testid="menu-page" className="bg-[#F5EFE2] min-h-screen pt-24">
-            {/* Header */}
-            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-10">
-                <p className="overline">Il nostro menù</p>
-                <h1 className="h-display text-5xl sm:text-7xl mt-5">Ogni piatto, una <span className="italic text-[#8A5B3D]">storia</span>.</h1>
-                <p className="mt-6 text-[#5C4E3C] max-w-2xl">
-                    Sfoglia le categorie, aggiungi al carrello e scegli se ritirare, farti consegnare, o trovarlo pronto al tavolo.
-                </p>
+            {/* ─── HERO — editorial header (Soho/Hoxton vibe) ─── */}
+            <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-12">
+                <div className="text-center max-w-3xl mx-auto">
+                    <span className="ornament overline">Il nostro menù</span>
+                    <h1 className="h-display text-5xl sm:text-7xl mt-8 leading-[1.05] text-[#2C2418]">
+                        Ogni piatto, <span className="italic">una storia</span>.
+                    </h1>
+                    <p className="mt-7 text-[#5C4E3C] leading-relaxed">
+                        Ingredienti di stagione, materie prime tracciate, ricette cucinate a vista.
+                        Aggiungi al carrello e scegli come gustarli — al tavolo, da asporto, o a casa.
+                    </p>
+                </div>
             </section>
 
             {/* Specials banner if any */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
                 <SpecialsBanner />
                 <ReviewCTABanner testId="menu-top-review-banner" />
             </div>
 
-            {/* Category tabs */}
-            <div className="sticky top-20 z-30 bg-[#F5EFE2]/90 backdrop-blur-md border-y border-[#8A5B3D]/15">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-auto">
-                    <div className="flex gap-2 py-4 min-w-max">
+            {/* ─── Editorial category nav (sticky) ─── */}
+            <div className="sticky top-20 z-30 bg-[#F5EFE2]/95 backdrop-blur-md border-b border-[#8A5B3D]/15 mt-8">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-auto">
+                    <nav className="flex gap-8 sm:gap-12 py-5 min-w-max justify-start sm:justify-center">
                         {categories.map((c) => (
                             <button
                                 key={c.slug}
                                 data-testid={`cat-tab-${c.slug}`}
                                 onClick={() => setActive(c.slug)}
-                                className={`px-5 py-2.5 rounded-full text-sm font-medium tracking-wide transition-colors whitespace-nowrap ${
+                                className={`relative font-serif text-lg sm:text-xl tracking-wide transition-colors whitespace-nowrap pb-1.5 ${
                                     active === c.slug
-                                        ? "bg-[#7C9A4A] text-[#FFFDF7]"
-                                        : "bg-transparent text-[#5C4E3C] hover:bg-[#EADFC9] hover:text-[#2C2418] border border-[#8A5B3D]/25"
+                                        ? "text-[#2C2418] italic"
+                                        : "text-[#5C4E3C] hover:text-[#2C2418]"
                                 }`}
                             >
                                 {c.name}
+                                {active === c.slug && (
+                                    <span className="absolute -bottom-px left-0 right-0 h-px bg-[#8A5B3D]" />
+                                )}
                             </button>
                         ))}
-                    </div>
+                    </nav>
                 </div>
             </div>
 
-            {/* Items grid */}
-            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+            {/* ─── Items list (editorial: dotted leaders, no cards) ─── */}
+            <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
                 {activeCategory && (
-                    <div className="mb-10 max-w-3xl">
-                        <h2 className="h-display text-3xl sm:text-4xl">{activeCategory.name}</h2>
+                    <div className="mb-12 text-center">
+                        <span className="overline text-[#8A5B3D]">— {activeCategory.name} —</span>
                         {activeCategory.description && (
-                            <p className="mt-3 text-[#5C4E3C] leading-relaxed">{activeCategory.description}</p>
+                            <p className="mt-5 text-[#5C4E3C] leading-relaxed max-w-2xl mx-auto">
+                                {activeCategory.description}
+                            </p>
                         )}
                     </div>
                 )}
@@ -93,14 +97,27 @@ const MenuPage = () => {
                         Nessun piatto disponibile in questa categoria.
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {visibleItems.map((it) => <MenuCard key={it.id} item={it} />)}
+                    <div className="border-t border-[#8A5B3D]/15">
+                        {visibleItems.map((it) => <MenuRow key={it.id} item={it} />)}
                     </div>
                 )}
+
+                {/* Allergen legend */}
+                <div className="mt-14 pt-8 border-t border-[#8A5B3D]/10 text-center">
+                    <p className="overline text-[#8A5B3D]/70 mb-3">Allergeni</p>
+                    <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-[#5C4E3C]">
+                        <span><strong className="font-semibold">G</strong> Glutine</span>
+                        <span><strong className="font-semibold">L</strong> Lattosio</span>
+                        <span><strong className="font-semibold">E</strong> Uova</span>
+                        <span><strong className="font-semibold">N</strong> Frutta a guscio</span>
+                        <span><strong className="font-semibold">F</strong> Pesce</span>
+                        <span><strong className="font-semibold">S</strong> Solfiti</span>
+                    </div>
+                </div>
             </section>
 
             {/* Google Review CTA */}
-            <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+            <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
                 <ReviewCTACard testId="menu-review-cta" />
             </section>
         </div>

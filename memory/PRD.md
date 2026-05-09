@@ -99,7 +99,16 @@ In `/app/memory/test_credentials.md`
 - **P3** Multi-language toggle (IT/EN)
 - **P3** Loyalty program (punti Tierra)
 
-## Sync v2 Tierra OS (added 2026-04-29)
+## Menu refresh v2 (added 2026-05-09)
+Aggiornamento completo del menu sulle 4 chalkboard ufficiali Tierra:
+- **Categorie**: Colazione · Bowls & Lunch · Piatti del Giorno · Aperitierra · Caffetteria & Drinks (5 categorie allineate ai chalkboard fisici)
+- **72 piatti** seedati (17 colazione + 3 bowls + 4 specials + 29 aperitierra + 19 caffetteria/drinks)
+- **Customizations v5**: "Create Your Bowl" con Base+Proteina(meat/seafood/vegan)+Add More; Tierra Plate con 2 proteine incluse
+- **Allergeni**: campo `tags` su MenuItem (G/L/E/N/F/S) con cerchi minuscoli sulla lista
+- **Veste grafica Soho/Hoxton**: nuovo `MenuRow` editoriale (lista con dotted leader + prezzo serif italic), tabs categorie con underline animato, header tipografico "— CATEGORIA —", legenda allergeni in fondo
+- Spans italic nei titoli liberati dai colori "link-like" (più eleganti, no falsi link)
+- Cerchio attorno al logo rimosso da hero Landing, ticker bar sostituita con "Info Locale" scenografica (dove siamo / orari / scrivici)
+- Le foto piatto verranno popolate dall'admin via Tierra OS / dashboard sito
 Sincronizzazione bidirezionale SITE ↔ OS:
 - **Outgoing push (SITE → OS)**: background fire-and-forget verso `lark-prenotazioni.js`/`lark-orders.js` quando si crea reservation/order pubblico. Auto-store di `booking_id` (Lark recordId) sul documento.
 - **Pull endpoints (OS → SITE)**:
