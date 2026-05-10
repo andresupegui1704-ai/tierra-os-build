@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 
 import { CartProvider } from "./context/CartContext";
 import Header from "./components/Header";
+import MagazineMasthead from "./components/MagazineMasthead";
 import Footer from "./components/Footer";
 import CartDrawer from "./components/CartDrawer";
 import WhatsAppFab from "./components/WhatsAppFab";
@@ -22,7 +23,7 @@ const Chrome = ({ children }) => {
     const isAdmin = pathname.startsWith("/admin");
     return (
         <>
-            {!isAdmin && <Header />}
+            {!isAdmin && <MagazineMasthead />}
             {children}
             {!isAdmin && <Footer />}
             {!isAdmin && <CartDrawer />}

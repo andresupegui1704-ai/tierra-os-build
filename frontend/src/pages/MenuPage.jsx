@@ -31,45 +31,52 @@ const MenuPage = () => {
     const visibleItems = items.filter((i) => i.category_slug === active);
 
     return (
-        <div data-testid="menu-page" className="bg-[#F5EFE2] min-h-screen pt-24">
-            {/* ─── HERO — editorial header (Soho/Hoxton vibe) ─── */}
-            <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-12">
-                <div className="text-center max-w-3xl mx-auto">
-                    <span className="ornament overline">Il nostro menù</span>
-                    <h1 className="h-display text-5xl sm:text-7xl mt-8 leading-[1.05] text-[#2C2418]">
-                        Ogni piatto, <span className="italic">una storia</span>.
-                    </h1>
-                    <p className="mt-7 text-[#5C4E3C] leading-relaxed">
-                        Ingredienti di stagione, materie prime tracciate, ricette cucinate a vista.
-                        Aggiungi al carrello e scegli come gustarli — al tavolo, da asporto, o a casa.
-                    </p>
+        <div data-testid="menu-page" className="bg-tierra-bg min-h-screen pt-2">
+            {/* ─── HERO — editorial magazine masthead ─── */}
+            <section className="max-w-screen-xl mx-auto px-6 lg:px-12 pt-12 pb-16">
+                <div className="flex items-baseline gap-5 mb-10">
+                    <span className="mag-number text-6xl sm:text-7xl">N°</span>
+                    <span className="h-px flex-1 max-w-32 bg-tierra-ink/30 mb-3" />
+                    <span className="overline">Il nostro menù</span>
                 </div>
+                <h1 className="h-display text-tierra-ink leading-[0.95] max-w-5xl"
+                    style={{ fontSize: "clamp(3rem, 8vw, 7rem)" }}>
+                    Ogni piatto,<br/>
+                    <span className="italic font-light text-tierra-brand">una storia.</span>
+                </h1>
+                <p className="mt-10 text-tierra-ink2 leading-relaxed max-w-2xl text-lg">
+                    Ingredienti di stagione, materie prime tracciate, ricette cucinate a vista.
+                    Aggiungi al carrello e scegli come gustarli — al tavolo, da asporto, o a casa.
+                </p>
             </section>
 
-            {/* Specials banner if any */}
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+            {/* Specials banner */}
+            <div className="max-w-screen-xl mx-auto px-6 lg:px-12 space-y-4">
                 <SpecialsBanner />
                 <ReviewCTABanner testId="menu-top-review-banner" />
             </div>
 
             {/* ─── Editorial category nav (sticky) ─── */}
-            <div className="sticky top-20 z-30 bg-[#F5EFE2]/95 backdrop-blur-md border-b border-[#8A5B3D]/15 mt-8">
-                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-auto">
-                    <nav className="flex gap-8 sm:gap-12 py-5 min-w-max justify-start sm:justify-center">
-                        {categories.map((c) => (
+            <div className="sticky top-[5.5rem] sm:top-[5.75rem] z-30 bg-tierra-bg/95 backdrop-blur-md border-y border-tierra-ink/10 mt-12">
+                <div className="max-w-screen-xl mx-auto px-6 lg:px-12 overflow-x-auto">
+                    <nav className="flex gap-8 sm:gap-12 py-5 min-w-max">
+                        {categories.map((c, idx) => (
                             <button
                                 key={c.slug}
                                 data-testid={`cat-tab-${c.slug}`}
                                 onClick={() => setActive(c.slug)}
-                                className={`relative font-serif text-lg sm:text-xl tracking-wide transition-colors whitespace-nowrap pb-1.5 ${
+                                className={`relative font-display text-lg sm:text-xl tracking-tight transition-colors whitespace-nowrap pb-1.5 flex items-baseline gap-2 ${
                                     active === c.slug
-                                        ? "text-[#2C2418] italic"
-                                        : "text-[#5C4E3C] hover:text-[#2C2418]"
+                                        ? "text-tierra-ink italic"
+                                        : "text-tierra-ink2 hover:text-tierra-ink"
                                 }`}
                             >
+                                <span className={`text-xs ${active === c.slug ? "text-tierra-brand" : "text-tierra-muted"}`}>
+                                    {String(idx + 1).padStart(2, "0")}
+                                </span>
                                 {c.name}
                                 {active === c.slug && (
-                                    <span className="absolute -bottom-px left-0 right-0 h-px bg-[#8A5B3D]" />
+                                    <span className="absolute -bottom-px left-0 right-0 h-px bg-tierra-brand" />
                                 )}
                             </button>
                         ))}
@@ -77,47 +84,51 @@ const MenuPage = () => {
                 </div>
             </div>
 
-            {/* ─── Items list (editorial: dotted leaders, no cards) ─── */}
-            <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+            {/* ─── Items list (editorial: dotted leaders) ─── */}
+            <section className="max-w-5xl mx-auto px-6 lg:px-12 py-16">
                 {activeCategory && (
-                    <div className="mb-12 text-center">
-                        <span className="overline text-[#8A5B3D]">— {activeCategory.name} —</span>
-                        {activeCategory.description && (
-                            <p className="mt-5 text-[#5C4E3C] leading-relaxed max-w-2xl mx-auto">
-                                {activeCategory.description}
-                            </p>
-                        )}
+                    <div className="mb-12 flex items-baseline gap-5">
+                        <span className="mag-number text-5xl">
+                            {String(categories.findIndex(c => c.slug === active) + 1).padStart(2, "0")}
+                        </span>
+                        <span className="h-px w-12 bg-tierra-ink/30 mb-2" />
+                        <span className="overline">{activeCategory.name}</span>
                     </div>
+                )}
+                {activeCategory && activeCategory.description && (
+                    <p className="text-tierra-ink2 leading-relaxed max-w-2xl mb-12 italic font-display text-xl">
+                        {activeCategory.description}
+                    </p>
                 )}
 
                 {loading ? (
-                    <div className="text-center py-20 text-[#5C4E3C]">Caricamento...</div>
+                    <div className="text-center py-20 text-tierra-ink2">Caricamento...</div>
                 ) : visibleItems.length === 0 ? (
-                    <div className="text-center py-20 text-[#5C4E3C] italic font-serif text-2xl">
+                    <div className="text-center py-20 text-tierra-ink2 italic font-display text-2xl">
                         Nessun piatto disponibile in questa categoria.
                     </div>
                 ) : (
-                    <div className="border-t border-[#8A5B3D]/15">
+                    <div className="border-t border-tierra-ink/15">
                         {visibleItems.map((it) => <MenuRow key={it.id} item={it} />)}
                     </div>
                 )}
 
                 {/* Allergen legend */}
-                <div className="mt-14 pt-8 border-t border-[#8A5B3D]/10 text-center">
-                    <p className="overline text-[#8A5B3D]/70 mb-3">Allergeni</p>
-                    <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-[#5C4E3C]">
-                        <span><strong className="font-semibold">G</strong> Glutine</span>
-                        <span><strong className="font-semibold">L</strong> Lattosio</span>
-                        <span><strong className="font-semibold">E</strong> Uova</span>
-                        <span><strong className="font-semibold">N</strong> Frutta a guscio</span>
-                        <span><strong className="font-semibold">F</strong> Pesce</span>
-                        <span><strong className="font-semibold">S</strong> Solfiti</span>
+                <div className="mt-14 pt-8 border-t border-tierra-ink/10">
+                    <p className="overline text-tierra-brand mb-4">Allergeni</p>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-tierra-ink2">
+                        <span><strong className="font-semibold text-tierra-ink">G</strong> Glutine</span>
+                        <span><strong className="font-semibold text-tierra-ink">L</strong> Lattosio</span>
+                        <span><strong className="font-semibold text-tierra-ink">E</strong> Uova</span>
+                        <span><strong className="font-semibold text-tierra-ink">N</strong> Frutta a guscio</span>
+                        <span><strong className="font-semibold text-tierra-ink">F</strong> Pesce</span>
+                        <span><strong className="font-semibold text-tierra-ink">S</strong> Solfiti</span>
                     </div>
                 </div>
             </section>
 
             {/* Google Review CTA */}
-            <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+            <section className="max-w-4xl mx-auto px-6 lg:px-12 pb-20">
                 <ReviewCTACard testId="menu-review-cta" />
             </section>
         </div>

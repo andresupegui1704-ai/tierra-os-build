@@ -2,44 +2,112 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Manrope:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,500;1,9..144,600&display=swap');
 
 :root {
-    /* Palette derived from Tierra logo: sage green + warm terracotta-brown on warm cream */
-    --tierra-bg: #F5EFE2;
-    --tierra-bg-alt: #EADFC9;
-    --tierra-paper: #FFFDF7;
-    --tierra-text: #2C2418;
-    --tierra-text-2: #5C4E3C;
-    --tierra-muted: #9B8E7A;
-    --tierra-brand: #7C9A4A;            /* sage, slightly darker than logo for AA */
-    --tierra-brand-hover: #5E7F32;
-    --tierra-brand-deep: #4A6127;       /* for body contrast */
-    --tierra-accent: #8A5B3D;           /* warm terracotta-brown from logo */
-    --tierra-accent-hover: #6F4527;
-    --tierra-success: #5E7F32;
-    --tierra-error: #923F28;
+    /* TIERRA v3 — Editorial Magazine palette (Hoxton × Vivi × organic) */
+    --tierra-bg:           #F7F4EB;   /* paper cream */
+    --tierra-bg-alt:       #EBE5D9;   /* warmer cream for sections */
+    --tierra-bg-deep:      #DFD6C3;   /* tertiary */
+    --tierra-paper:        #FFFDF7;
+    --tierra-ink:          #1A1814;   /* rich ink black (primary text) */
+    --tierra-ink-2:        #4A463F;   /* secondary text */
+    --tierra-muted:        #8A8276;
+    --tierra-brand:        #9B4A3B;   /* terracotta — primary CTA accent */
+    --tierra-brand-hover:  #7A3A2E;
+    --tierra-bordeaux:     #632626;   /* deep accent — emphasis */
+    --tierra-sage:         #7A8A70;   /* organic green secondary */
+    --tierra-olive:        #3B4232;   /* deep olive for body contrast */
+    --tierra-success:      #5E7F32;
+    --tierra-error:        #B0301C;
+
+    /* Legacy aliases — keep retro-compat with existing components */
+    --tierra-text:    var(--tierra-ink);
+    --tierra-text-2:  var(--tierra-ink-2);
+    --tierra-accent:  var(--tierra-brand);
+    --tierra-accent-hover: var(--tierra-brand-hover);
 }
 
 html, body {
     margin: 0;
     padding: 0;
     background: var(--tierra-bg);
-    color: var(--tierra-text);
-    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--tierra-ink);
+    font-family: 'DM Sans', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "ss01", "cv01";
 }
 
-.font-serif { font-family: 'Cormorant Garamond', Georgia, serif; }
-.font-sans { font-family: 'Manrope', system-ui, sans-serif; }
+/* Font families */
+.font-serif    { font-family: 'Cormorant Garamond', Georgia, serif; }
+.font-display  { font-family: 'Fraunces', 'Cormorant Garamond', Georgia, serif; font-optical-sizing: auto; }
+.font-sans     { font-family: 'DM Sans', system-ui, sans-serif; }
 
+/* Display heading — Hoxton style: massive, tight, italic-accents */
+.h-display {
+    font-family: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 0.95;
+    font-optical-sizing: auto;
+}
+.h-mag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 0.9;
+}
+
+/* Overline — used for N° markers and section labels */
 .overline {
     font-size: 11px;
-    letter-spacing: 0.24em;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
     font-weight: 600;
-    color: var(--tierra-accent);
+    font-family: 'DM Sans', system-ui, sans-serif;
+    color: var(--tierra-brand);
+}
+
+/* Issue marker (N° 01) */
+.issue-marker {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--tierra-brand);
+    letter-spacing: 0;
+}
+
+/* Magazine number — massive serif numerals for NumberedSection */
+.mag-number {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300;
+    font-style: italic;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    color: var(--tierra-brand);
+}
+
+/* Hover-italic on links — Hoxton signature micro-interaction */
+.link-italic {
+    transition: font-style 200ms ease, color 200ms ease;
+}
+.link-italic:hover {
+    font-style: italic;
+    font-family: 'Fraunces', 'Cormorant Garamond', serif;
+}
+
+/* Floating illustration animation — for watercolor */
+@keyframes float-y { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+.float-y { animation: float-y 6s ease-in-out infinite; }
+
+/* Editorial divider — hand-drawn wavy line */
+.divider-wave {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 12'><path d='M0 6 Q15 0 30 6 T60 6 T90 6 T120 6' stroke='%239B4A3B' stroke-width='1' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat: repeat-x;
+    background-position: center;
+    height: 12px;
+    opacity: 0.6;
 }
 
 /* Paper/grain feel — bistrot menu */

@@ -1,430 +1,264 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, Leaf, Sprout, Heart, MessageCircle, MapPin, Clock, Navigation, Instagram } from "lucide-react";
+import { ArrowRight, Sprout, Heart, Leaf } from "lucide-react";
 import { api } from "../lib/api";
+import EditorialHero from "../components/EditorialHero";
+import ChefDiary from "../components/ChefDiary";
 import SpecialsBanner from "../components/SpecialsBanner";
 import { ReviewCTACard } from "../components/ReviewCTA";
-import { BRAND, waLink } from "../config/brand";
+import { BRAND } from "../config/brand";
 
-const LOGO = "/brand/tierra-logo.png";
-const POKE = "https://images.unsplash.com/photo-1759922222212-3657d43bd5b5?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
-const WOOD = "https://images.unsplash.com/photo-1514944040828-c79f6cd6eb43?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600";
-const BANCO = "/gallery/banco.webp";
-const SALA = "/gallery/sala.webp";
-const FACCIATA = "/gallery/facciata.webp";
 const DEHORS_1 = "/gallery/dehors-1.webp";
 const DEHORS_2 = "/gallery/dehors-2.webp";
 const DEHORS_3 = "/gallery/dehors-3.webp";
 
-const Pillar = ({ icon: Icon, title, children }) => (
-    <div className="p-8 rounded-2xl bg-[#FFFDF7] border border-[#8A5B3D]/10 hover:border-[#8A5B3D]/30 transition-colors">
-        <Icon size={28} strokeWidth={1.3} className="text-[#8A5B3D]" />
-        <h3 className="font-serif text-2xl mt-5 text-[#2C2418]">{title}</h3>
-        <p className="mt-3 text-sm leading-relaxed text-[#5C4E3C]">{children}</p>
-    </div>
-);
+const valori = [
+    {
+        n: "i.",
+        title: "Biologico, davvero",
+        body: "Frutta, verdura e farine certificate. Lavoriamo solo con produttori che possiamo nominare per nome.",
+        icon: Sprout,
+    },
+    {
+        n: "ii.",
+        title: "Cucina di stagione",
+        body: "Il menu cambia con la natura. Quello che ordini oggi non è detto che ci sia il mese prossimo.",
+        icon: Leaf,
+    },
+    {
+        n: "iii.",
+        title: "Casa, prima che locale",
+        body: "Niente pretese, niente fretta. Una cucina che ti accoglie e ti dà tempo di stare.",
+        icon: Heart,
+    },
+];
 
 const Landing = () => {
     const [featured, setFeatured] = useState([]);
 
     useEffect(() => {
-        api.get("/menu/items", { params: { category: "pranzo-cena", only_available: true } })
-            .then((r) => setFeatured(r.data.slice(0, 3)))
+        api.get("/menu/items")
+            .then((r) => {
+                // Pick 3 items that have a real (non-placeholder) image
+                const withPhoto = r.data.filter(
+                    (it) => it.image_url && !/unsplash\.com/i.test(it.image_url)
+                );
+                setFeatured(withPhoto.slice(0, 3));
+            })
             .catch(() => {});
     }, []);
 
     return (
-        <div data-testid="landing-page">
-            {/* HERO v1 — Logo as centrepiece (bistrot/ristorante feel) */}
-            <section className="relative overflow-hidden paper-texture pt-20">
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-20 text-center">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6 }}>
-                        <span className="ornament overline">Dal 2019 · Roma</span>
-                    </motion.div>
+        <div data-testid="landing-page" className="bg-tierra-bg text-tierra-ink">
+            {/* ═══ 01 — EDITORIAL HERO ═══ */}
+            <EditorialHero />
 
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.92, y: 20 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        transition={{ duration: 1, ease: "easeOut" }}
-                        className="mt-10 flex justify-center"
-                    >
-                        <img src={LOGO} alt="Tierra Organic Bistrot Café" className="h-56 sm:h-72 w-auto" />
-                    </motion.div>
-
-                    <motion.h1
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.8, delay: 0.4 }}
-                        className="h-display text-4xl sm:text-5xl lg:text-6xl mt-12 text-[#2C2418] leading-[1.1]"
-                    >
-                        Benvenuti da <span className="italic">Tierra</span>,
-                        <br/>un bistrot biologico <span className="italic">che sa di casa</span>
-                        <br/>con prodotti assolutamente organici.
-                    </motion.h1>
-                    <motion.p
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.8, delay: 0.7 }}
-                        className="mt-8 text-lg text-[#5C4E3C] max-w-2xl mx-auto leading-relaxed"
-                    >
-                        Ingredienti di stagione, materie prime tracciate, ricette cucinate a vista —
-                        ti aspettiamo in Via Tirso 34, a Roma.
-                    </motion.p>
-
-                    <motion.div
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.7, delay: 0.9 }}
-                        className="mt-10 flex flex-wrap justify-center gap-4"
-                    >
-                        <Link to="/menu" data-testid="hero-cta-menu" className="btn-brand">
-                            Ordina dal menù <ArrowRight size={18} />
-                        </Link>
-                        <Link to="/prenota" data-testid="hero-cta-reserve" className="btn-accent">
-                            Prenota un tavolo
-                        </Link>
-                        <a
-                            href={waLink(BRAND.copy.whatsappShortText)}
-                            target="_blank" rel="noreferrer"
-                            data-testid="hero-cta-whatsapp"
-                            className="btn-outline-brand"
-                        >
-                            <MessageCircle size={18} /> WhatsApp
-                        </a>
-                    </motion.div>
-                </div>
-
-                {/* INFO LOCALE — scenografica, sotto la hero */}
-                <div className="border-t border-[#8A5B3D]/15 bg-[#EADFC9]/40">
-                    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
-                        <div className="text-center mb-10">
-                            <span className="ornament overline">Ti aspettiamo</span>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 sm:gap-12">
-                            {/* Indirizzo */}
-                            <motion.a
-                                href={BRAND.links.mapsDirections}
-                                target="_blank" rel="noreferrer"
-                                data-testid="hero-info-address"
-                                initial={{ opacity: 0, y: 16 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.6 }}
-                                className="text-center group"
-                            >
-                                <MapPin size={22} strokeWidth={1.2} className="mx-auto text-[#8A5B3D] group-hover:scale-110 transition-transform" />
-                                <p className="overline mt-5 text-[#8A5B3D]">Dove siamo</p>
-                                <p className="font-serif text-2xl mt-3 text-[#2C2418]">{BRAND.address.street}</p>
-                                <p className="text-sm text-[#5C4E3C] mt-1">{BRAND.address.city}</p>
-                                <p className="text-xs mt-4 text-[#8A5B3D] underline-offset-4 group-hover:underline">Indicazioni →</p>
-                            </motion.a>
-
-                            {/* Orari */}
-                            <motion.div
-                                initial={{ opacity: 0, y: 16 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.6, delay: 0.1 }}
-                                className="text-center md:border-x md:border-[#8A5B3D]/15 md:px-6"
-                            >
-                                <Clock size={22} strokeWidth={1.2} className="mx-auto text-[#8A5B3D]" />
-                                <p className="overline mt-5 text-[#8A5B3D]">Orari</p>
-                                <ul className="font-serif text-lg mt-3 text-[#2C2418] space-y-1">
-                                    {BRAND.hours.map((h) => (
-                                        <li key={h.days}>
-                                            <span className="text-[#5C4E3C] text-sm font-sans tracking-wide">{h.days}</span>
-                                            <span className="mx-2 text-[#8A5B3D]/40">·</span>
-                                            {h.time}
-                                        </li>
-                                    ))}
-                                </ul>
-                                {BRAND.specialHours && (
-                                    <p className="text-xs mt-4 text-[#7C9A4A]">
-                                        {BRAND.specialHours.label} · {BRAND.specialHours.time}
-                                    </p>
-                                )}
-                            </motion.div>
-
-                            {/* Contatti */}
-                            <motion.div
-                                initial={{ opacity: 0, y: 16 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.6, delay: 0.2 }}
-                                className="text-center"
-                            >
-                                <MessageCircle size={22} strokeWidth={1.2} className="mx-auto text-[#8A5B3D]" />
-                                <p className="overline mt-5 text-[#8A5B3D]">Scrivici</p>
-                                <a
-                                    href={waLink()}
-                                    target="_blank" rel="noreferrer"
-                                    data-testid="hero-info-whatsapp"
-                                    className="block font-serif text-2xl mt-3 text-[#2C2418] hover:text-[#7C9A4A] transition-colors"
-                                >
-                                    {BRAND.phone.display}
-                                </a>
-                                <p className="text-sm text-[#5C4E3C] mt-1">WhatsApp · telefono</p>
-                                {BRAND.links.instagram && (
-                                    <a
-                                        href={BRAND.links.instagram}
-                                        target="_blank" rel="noreferrer"
-                                        data-testid="hero-info-instagram"
-                                        className="inline-flex items-center gap-1.5 text-xs mt-4 text-[#8A5B3D] underline-offset-4 hover:underline"
-                                    >
-                                        <Instagram size={12} /> {BRAND.links.instagramHandle}
-                                    </a>
-                                )}
-                            </motion.div>
-                        </div>
-
-                        {/* Subtle brand hallmarks — no longer masquerading as links */}
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            whileInView={{ opacity: 1 }}
-                            viewport={{ once: true }}
-                            transition={{ duration: 0.8, delay: 0.3 }}
-                            className="mt-14 pt-8 border-t border-[#8A5B3D]/15 flex flex-wrap justify-center gap-x-8 gap-y-2 text-[#8A5B3D]/70"
-                        >
-                            {["100% Biologico", "Farm-to-table", "Ingredienti di stagione", "Poke & Ceviche"].map((t) => (
-                                <span key={t} className="text-xs tracking-[0.18em] uppercase">✦ {t}</span>
-                            ))}
-                        </motion.div>
-                    </div>
-                </div>
-            </section>
-
-            {/* HERO v2 — Logo lockup on dark photo (a second visual moment) */}
-            <section className="relative">
-                <div className="relative h-[60vh] min-h-[420px] overflow-hidden">
-                    <img src={DEHORS_3} alt="Il dehors di Tierra in Via Tirso al tramonto" className="absolute inset-0 w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#2C2418]/85 via-[#2C2418]/55 to-transparent" />
-                    <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center">
-                        <div className="max-w-xl">
-                            <img src={LOGO} alt="Tierra" className="h-28 w-auto object-contain drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" />
-                            <h2 className="h-display text-4xl sm:text-5xl text-[#F5EFE2] mt-8">
-                                Benvenuti <span className="italic">a casa</span>.
-                            </h2>
-                            <p className="mt-5 text-[#EADFC9]/90 leading-relaxed">
-                                Colazioni lente, pranzi genuini, aperitivi al profumo di pomodoro fresco.
-                                Ti aspettiamo in Via Tirso 34.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* STORIA */}
-            <section id="storia" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-6">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
-                    <div className="md:col-span-5">
-                        <p className="overline">La nostra storia</p>
-                        <h2 className="h-display text-4xl sm:text-5xl mt-4 text-[#2C2418]">
-                            Una cucina che <span className="italic">ascolta</span> la stagione.
-                        </h2>
-                    </div>
-                    <div className="md:col-span-7 md:col-start-7">
-                        <p className="text-lg text-[#5C4E3C] leading-relaxed">
-                            Tierra nasce da un'idea semplice: cucinare bene, con ingredienti veri. Scegliamo piccoli
-                            produttori locali, farine biologiche, pesce del giorno e verdure di stagione.
-                        </p>
-                        <p className="mt-6 text-[#5C4E3C] leading-relaxed">
-                            Dalla colazione all'aperitivo, ogni piatto è pensato per farti stare bene —
-                            senza mai rinunciare al gusto. Ci trovi a due passi dal centro, in un'atmosfera
-                            calma, luminosa, accogliente.
-                        </p>
-                    </div>
-                </div>
-            </section>
-
-            {/* DEHORS — The outdoor experience */}
-            <section id="dehors" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-10">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
-                    {/* Big feature: entrance + chef */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 30 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: "-80px" }}
-                        transition={{ duration: 0.7 }}
-                        className="md:col-span-7 relative rounded-3xl overflow-hidden group"
-                    >
-                        <img src={FACCIATA} alt="L'ingresso di Tierra Organic Bistrot in Via Tirso 34, Roma" className="w-full h-full aspect-square md:aspect-auto object-cover group-hover:scale-[1.02] transition-transform duration-[1200ms]" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#2C2418]/70 via-transparent to-transparent" />
-                        <div className="absolute bottom-0 left-0 p-8 sm:p-10 text-[#F5EFE2]">
-                            <p className="overline text-[#EADFC9]">Il nostro dehors</p>
-                            <h2 className="h-display text-3xl sm:text-4xl lg:text-5xl mt-3 leading-tight">
-                                Sotto le <span className="italic">lanterne</span>,<br/>in Via Tirso.
-                            </h2>
-                        </div>
-                    </motion.div>
-
-                    {/* Supporting: two stacked photos */}
-                    <div className="md:col-span-5 grid grid-rows-2 gap-6">
-                        <motion.img
-                            initial={{ opacity: 0, y: 30 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true, margin: "-80px" }}
-                            transition={{ duration: 0.7, delay: 0.15 }}
-                            src={DEHORS_1}
-                            alt="Ospiti di Tierra al dehors durante l'aperitivo"
-                            className="w-full h-full object-cover rounded-3xl"
-                        />
-                        <motion.img
-                            initial={{ opacity: 0, y: 30 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true, margin: "-80px" }}
-                            transition={{ duration: 0.7, delay: 0.3 }}
-                            src={DEHORS_2}
-                            alt="Tavoli apparecchiati al dehors di Tierra all'ora blu"
-                            className="w-full h-full object-cover rounded-3xl"
-                        />
-                    </div>
-                </div>
-
-                <motion.p
-                    initial={{ opacity: 0, y: 10 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.7, delay: 0.2 }}
-                    className="mt-10 max-w-3xl text-[#5C4E3C] leading-relaxed"
-                >
-                    Un dehors coperto, foglie d'eucalipto essiccate, lanterne in rattan e funghi
-                    riscaldanti per stare fuori tutto l'anno. Un angolo di Roma dove il tempo rallenta
-                    — perfetto per una colazione lenta, un pranzo genuino o l'Aperitierra al tramonto.
-                </motion.p>
-            </section>
-
-            {/* SPECIALS (appears only if admin has marked any) */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* Specials banner (if any) */}
+            <div className="max-w-screen-xl mx-auto px-6 lg:px-12 mt-4">
                 <SpecialsBanner />
             </div>
 
-            {/* PILLARS */}
-            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Pillar icon={Leaf} title="100% Biologico">
-                        Ingredienti certificati, coltivati senza pesticidi. Trasparenza su ogni piatto.
-                    </Pillar>
-                    <Pillar icon={Sprout} title="Filiera corta">
-                        Lavoriamo con piccoli produttori italiani per ridurre sprechi e chilometri.
-                    </Pillar>
-                    <Pillar icon={Heart} title="Ricette d'autore">
-                        Poke bowls, ceviche, taglieri artigianali, dolci da forno fatti in casa ogni mattina.
-                    </Pillar>
-                </div>
-            </section>
+            {/* ═══ 02 — DAL TACCUINO DELLO CHEF ═══ */}
+            <ChefDiary />
 
-            {/* FEATURED DISHES */}
-            <section className="warm-gradient py-24">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-end justify-between flex-wrap gap-4 mb-12">
-                        <div>
-                            <p className="overline">Dal nostro menù</p>
-                            <h2 className="h-display text-4xl sm:text-5xl mt-4">Piatti del momento</h2>
-                        </div>
-                        <Link to="/menu" data-testid="view-full-menu" className="btn-outline-brand">
-                            Menù completo <ArrowRight size={16} />
-                        </Link>
+            {/* ═══ 03 — TRE VALORI (NUMBERED) ═══ */}
+            <section className="bg-tierra-bg py-24 sm:py-32">
+                <div className="max-w-screen-xl mx-auto px-6 lg:px-12">
+                    <div className="flex items-baseline gap-5 mb-14">
+                        <span className="mag-number text-6xl sm:text-7xl">03</span>
+                        <span className="h-px w-20 bg-tierra-ink/30 mb-3" />
+                        <span className="overline">Tre principi</span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {featured.map((it) => (
-                            <Link key={it.id} to="/menu" data-testid={`featured-${it.id}`} className="group bg-[#FFFDF7] rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all border border-[#8A5B3D]/10">
-                                {it.image_url && <div className="aspect-[4/3] overflow-hidden"><img src={it.image_url} alt={it.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" /></div>}
-                                <div className="p-6">
-                                    {it.badge && <span className="overline">{it.badge}</span>}
-                                    <h3 className="font-serif text-2xl mt-2">{it.name}</h3>
-                                    <div className="mt-3 flex justify-between items-center">
-                                        <p className="text-sm text-[#5C4E3C] line-clamp-2">{it.description}</p>
-                                        <span className="font-serif text-xl text-[#7C9A4A] ml-4">€ {it.price.toFixed(2)}</span>
-                                    </div>
-                                </div>
-                            </Link>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-12 lg:gap-20">
+                        {valori.map((v, i) => (
+                            <motion.div
+                                key={v.n}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ duration: 0.6, delay: i * 0.1 }}
+                                className="relative"
+                            >
+                                <span className="font-display italic text-5xl text-tierra-brand">{v.n}</span>
+                                <h3 className="h-mag text-3xl mt-6 text-tierra-ink leading-tight">
+                                    {v.title}
+                                </h3>
+                                <p className="mt-4 text-tierra-ink2 leading-relaxed">
+                                    {v.body}
+                                </p>
+                                <v.icon size={22} strokeWidth={1.2} className="text-tierra-sage mt-6" />
+                            </motion.div>
                         ))}
                     </div>
                 </div>
             </section>
 
-            {/* DUAL IMAGE BLOCK */}
-            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                <img src={BANCO} alt="Il banco di Tierra Organic Bistrot Café" className="w-full aspect-[4/5] object-cover rounded-3xl" />
-                <div>
-                    <p className="overline">Delivery · Asporto · Sul posto</p>
-                    <h2 className="h-display text-4xl sm:text-5xl mt-4">
-                        Ordina come <span className="italic">preferisci</span>.
-                    </h2>
-                    <p className="mt-6 text-[#5C4E3C] leading-relaxed">
-                        Preferisci mangiare a casa? Fare un salto veloce a ritirare? O prenotare un tavolo
-                        e trovare il tuo ordine pronto al tuo arrivo? Scegli tu. Ci pensiamo noi.
-                    </p>
-                    <div className="mt-8 flex gap-3 flex-wrap">
-                        <Link to="/menu" data-testid="home-order-cta" className="btn-brand">Ordina ora</Link>
-                        <Link to="/prenota" data-testid="home-reserve-cta" className="btn-outline-brand">Prenota un tavolo</Link>
-                    </div>
-                </div>
-            </section>
-
-            {/* CONTATTI */}
-            <section className="bg-[#7C9A4A]/95 text-[#F5EFE2] py-24 relative overflow-hidden">
-                <img src={WOOD} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15 mix-blend-overlay" />
-                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-                    <div>
-                        <p className="overline text-[#EADFC9]">Ti aspettiamo</p>
-                        <h2 className="h-display text-4xl sm:text-5xl mt-4">
-                            Vieni a trovarci in <span className="italic">{BRAND.address.street}</span>.
-                        </h2>
-                        <ul className="mt-10 space-y-4 text-[#EADFC9]">
-                            <li className="flex items-start gap-3"><MapPin size={18} strokeWidth={1.5} className="mt-0.5 shrink-0" /><span>{BRAND.address.full}</span></li>
-                            <li className="flex items-start gap-3"><Clock size={18} strokeWidth={1.5} className="mt-0.5 shrink-0" /><span>{BRAND.hours.map((h) => `${h.days} ${h.time}`).join(" · ")}</span></li>
-                        </ul>
-                        <div className="mt-10 flex gap-3 flex-wrap">
-                            <Link to="/prenota" className="btn-outline-brand" style={{color: "#F5EFE2", borderColor: "rgba(245,239,226,0.5)"}}>Prenota</Link>
-                            <a href={waLink()} target="_blank" rel="noreferrer" data-testid="contact-whatsapp" className="btn-accent">
-                                <MessageCircle size={18} /> WhatsApp
-                            </a>
-                            {BRAND.links.instagram && (
-                                <a
-                                    href={BRAND.links.instagram}
-                                    target="_blank" rel="noreferrer"
-                                    data-testid="contact-instagram"
-                                    className="btn-outline-brand"
-                                    style={{color: "#F5EFE2", borderColor: "rgba(245,239,226,0.5)"}}
-                                >
-                                    <Instagram size={18} /> Instagram
-                                </a>
-                            )}
-                            <a
-                                href={BRAND.links.mapsDirections}
-                                target="_blank" rel="noreferrer"
-                                data-testid="contact-directions"
-                                className="btn-outline-brand"
-                                style={{color: "#F5EFE2", borderColor: "rgba(245,239,226,0.5)"}}
+            {/* ═══ 04 — FEATURED DISHES (MAGAZINE GALLERY) ═══ */}
+            {featured.length > 0 && (
+                <section className="bg-tierra-bgAlt py-24 sm:py-32">
+                    <div className="max-w-screen-xl mx-auto px-6 lg:px-12">
+                        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-8 mb-14">
+                            <div>
+                                <div className="flex items-baseline gap-5 mb-6">
+                                    <span className="mag-number text-6xl sm:text-7xl">04</span>
+                                    <span className="h-px w-20 bg-tierra-ink/30 mb-3" />
+                                    <span className="overline">Dalla cucina</span>
+                                </div>
+                                <h2 className="h-display text-4xl sm:text-6xl text-tierra-ink leading-tight max-w-2xl">
+                                    Le scelte di <span className="italic text-tierra-brand">questa settimana</span>.
+                                </h2>
+                            </div>
+                            <Link
+                                to="/menu"
+                                data-testid="featured-see-menu"
+                                className="link-italic inline-flex items-center gap-2 text-tierra-ink underline underline-offset-8 decoration-tierra-brand/40 hover:decoration-tierra-brand"
                             >
-                                <Navigation size={18} /> Indicazioni
-                            </a>
+                                Vedi il menu completo
+                                <ArrowRight size={16} />
+                            </Link>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 lg:gap-14">
+                            {featured.map((it, i) => (
+                                <motion.article
+                                    key={it.id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    whileInView={{ opacity: 1, y: 0 }}
+                                    viewport={{ once: true }}
+                                    transition={{ duration: 0.6, delay: i * 0.1 }}
+                                    className={`group ${i === 1 ? "md:mt-12" : ""}`}
+                                >
+                                    <div className="aspect-[4/5] bg-tierra-paper overflow-hidden mb-5">
+                                        <img
+                                            src={it.image_url}
+                                            alt={it.name}
+                                            className="w-full h-full object-contain p-2 group-hover:scale-[1.03] transition-transform duration-700"
+                                            loading="lazy"
+                                        />
+                                    </div>
+                                    <div className="flex items-baseline justify-between gap-3">
+                                        <h3 className="font-display text-2xl text-tierra-ink">{it.name}</h3>
+                                        <span className="font-display italic text-xl text-tierra-brand tabular-nums shrink-0">
+                                            € {Number(it.price).toFixed(2)}
+                                        </span>
+                                    </div>
+                                    {it.description && (
+                                        <p className="mt-2 text-sm text-tierra-ink2 leading-relaxed line-clamp-2">
+                                            {it.description}
+                                        </p>
+                                    )}
+                                </motion.article>
+                            ))}
                         </div>
                     </div>
+                </section>
+            )}
 
-                    {/* Interactive embedded map */}
-                    <div className="relative rounded-3xl overflow-hidden aspect-[4/5] shadow-2xl border-4 border-[#F5EFE2]/20">
-                        <iframe
-                            data-testid="contact-map"
-                            title={`Mappa ${BRAND.fullName} — ${BRAND.address.full}`}
-                            src={BRAND.links.mapsEmbed}
-                            className="absolute inset-0 w-full h-full"
-                            style={{ border: 0 }}
-                            loading="lazy"
-                            referrerPolicy="no-referrer-when-downgrade"
-                            allowFullScreen
-                        />
+            {/* ═══ 05 — IL DEHORS ═══ */}
+            <section className="bg-tierra-bg py-24 sm:py-32">
+                <div className="max-w-screen-xl mx-auto px-6 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-start">
+                    <div className="lg:col-span-5">
+                        <div className="flex items-baseline gap-5 mb-6">
+                            <span className="mag-number text-6xl sm:text-7xl">05</span>
+                            <span className="h-px w-20 bg-tierra-ink/30 mb-3" />
+                            <span className="overline">Il nostro dehors</span>
+                        </div>
+                        <h2 className="h-display text-4xl sm:text-5xl text-tierra-ink leading-tight">
+                            Mangiare all'aperto,<br/>
+                            <span className="italic text-tierra-brand">come a casa.</span>
+                        </h2>
+                        <p className="mt-8 text-tierra-ink2 leading-relaxed">
+                            Sei tavoli sotto le piante, lampade morbide la sera. Un piccolo
+                            angolo di Roma dove il tempo rallenta.
+                        </p>
+                        <Link
+                            to="/prenota"
+                            data-testid="dehors-reserve-cta"
+                            className="mt-10 inline-flex items-center gap-3 px-7 py-4 border border-tierra-ink hover:bg-tierra-ink hover:text-tierra-bg transition-colors text-sm tracking-wide"
+                        >
+                            Prenota un tavolo all'aperto
+                            <ArrowRight size={16} />
+                        </Link>
+                    </div>
+
+                    {/* Asymmetric photo grid */}
+                    <div className="lg:col-span-7 grid grid-cols-12 gap-3 sm:gap-5">
+                        <div className="col-span-8 aspect-[4/5] overflow-hidden">
+                            <img src={DEHORS_1} alt="Dehors Tierra" className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" />
+                        </div>
+                        <div className="col-span-4 flex flex-col gap-3 sm:gap-5">
+                            <div className="aspect-square overflow-hidden">
+                                <img src={DEHORS_2} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" />
+                            </div>
+                            <div className="aspect-square overflow-hidden">
+                                <img src={DEHORS_3} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" />
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            {/* Google Review CTA */}
-            <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
-                <ReviewCTACard variant="light" testId="landing-review-cta" />
+            {/* ═══ 06 — COME ORDINARE ═══ */}
+            <section className="bg-tierra-olive text-tierra-bg py-24 sm:py-32 relative overflow-hidden">
+                <div className="max-w-screen-xl mx-auto px-6 lg:px-12">
+                    <div className="flex items-baseline gap-5 mb-12">
+                        <span className="mag-number text-6xl sm:text-7xl text-tierra-bg/40">06</span>
+                        <span className="h-px w-20 bg-tierra-bg/30 mb-3" />
+                        <span className="overline text-tierra-bg/70">Come ordinare</span>
+                    </div>
+
+                    <h2 className="h-display text-4xl sm:text-6xl mb-16 max-w-3xl">
+                        Ordina come<br/>
+                        <span className="italic">preferisci.</span>
+                    </h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-10 lg:gap-16">
+                        {[
+                            { n: "01", title: "Al tavolo", body: "Scannerizza il QR, scegli, ricevi tutto in cucina senza alzarti." },
+                            { n: "02", title: "D'asporto", body: "Prepariamo per quando passi. Pronto in 15–20 minuti." },
+                            { n: "03", title: "A domicilio", body: "Consegne in zona Salario, Trieste, Nomentano in bici elettrica." },
+                        ].map((s, i) => (
+                            <motion.div
+                                key={s.n}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ duration: 0.6, delay: i * 0.1 }}
+                                className="border-t border-tierra-bg/30 pt-6"
+                            >
+                                <span className="font-display italic text-3xl text-tierra-bg/60">{s.n}</span>
+                                <h3 className="h-mag text-3xl mt-3">{s.title}</h3>
+                                <p className="mt-3 text-tierra-bg/80 leading-relaxed">{s.body}</p>
+                            </motion.div>
+                        ))}
+                    </div>
+
+                    <div className="mt-16 flex flex-wrap gap-4">
+                        <Link
+                            to="/menu"
+                            data-testid="order-cta-menu"
+                            className="inline-flex items-center gap-3 px-7 py-4 bg-tierra-brand text-tierra-bg hover:bg-tierra-brandHover transition-colors text-sm tracking-wide"
+                        >
+                            Vai al menu
+                            <ArrowRight size={16} />
+                        </Link>
+                        <a
+                            href={BRAND.links.mapsDirections}
+                            target="_blank" rel="noreferrer"
+                            data-testid="order-cta-directions"
+                            className="link-italic inline-flex items-center gap-2 underline underline-offset-8 decoration-tierra-bg/40 hover:decoration-tierra-bg text-sm"
+                        >
+                            Vieni a trovarci
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            {/* ═══ 07 — GOOGLE REVIEW CTA ═══ */}
+            <section className="max-w-screen-xl mx-auto px-6 lg:px-12 py-24">
+                <ReviewCTACard testId="landing-review-cta" />
             </section>
         </div>
     );
