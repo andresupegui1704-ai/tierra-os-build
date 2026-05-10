@@ -90,7 +90,7 @@ export const restaurantSchema = () => ({
         "Tierra Bistrot Parioli",
         "Tierra",
     ],
-    description: "Tierra è un bistrot biologico certificato a Roma, nel quartiere Parioli-Trieste. Aperto dal 2019, propone una cucina con ingredienti 100% biologici e locali: poke bowl personalizzabili, avocado toast, colazione bio, piatti del giorno, aperitivo con dehor su Via Tirso 34.",
+    description: "Tierra Organic Bistrot — segnalato dal Gambero Rosso tra i migliori bistrot di Roma e del Lazio per 6 anni consecutivi. Bistrot biologico certificato a Roma in Via Tirso 34, quartiere Parioli-Trieste. Aperto dal 2019, propone poke bowl personalizzabili, avocado toast, colazione bio, piatti del giorno e aperitivo con dehor. Tutti gli ingredienti sono certificati biologici e selezionati da fornitori locali del Lazio.",
     url: SITE,
     telephone: BRAND.phone.display,
     email: BRAND.email,
@@ -132,9 +132,16 @@ export const restaurantSchema = () => ({
         { "@type": "LocationFeatureSpecification", name: "WhatsApp Booking", value: true },
     ],
     sameAs: [
+        "https://www.gamberorosso.it/luoghi/locali/bistrot/tierra-organic-bistrot/",
+        "https://www.turismoroma.it/en/hospitality/tierra-organic-bistrot",
+        "https://www.tripadvisor.com/Restaurant_Review-g187791-d19874458-Reviews-Tierra_Organic_Bistrot-Rome_Lazio.html",
+        "https://www.thefork.it/ristorante/tierra-organic-bistrot-r801635",
+        "https://www.facebook.com/TierraOrganicBistrot/",
+        "https://www.ecoincitta.it/ecopoint/tierra-organic-bistrot/",
         BRAND.links.instagram,
         BRAND.links.googleReview,
     ].filter(Boolean),
+    award: "Segnalato dalla Guida Gambero Rosso — Roma e il Meglio del Lazio per 6 anni consecutivi",
 });
 
 export const menuSchema = (items = []) => ({

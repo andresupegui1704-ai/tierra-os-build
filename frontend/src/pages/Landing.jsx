@@ -7,6 +7,8 @@ import EditorialHero from "../components/EditorialHero";
 import ChefDiary from "../components/ChefDiary";
 import SpecialsBanner from "../components/SpecialsBanner";
 import { ReviewCTACard } from "../components/ReviewCTA";
+import PressSection from "../components/PressSection";
+import SEO, { restaurantSchema, faqSchema } from "../components/SEO";
 import { BRAND } from "../config/brand";
 
 const DEHORS_1 = "/gallery/dehors-1.webp";
@@ -268,6 +270,9 @@ const Landing = () => {
             <section className="max-w-screen-xl mx-auto px-6 lg:px-12 py-24">
                 <ReviewCTACard testId="landing-review-cta" />
             </section>
+
+            {/* ═══ PRESS & RICONOSCIMENTI (LLM authority signals) ═══ */}
+            <PressSection />
 
             {/* ═══ SEO SEMANTIC FOOTER — for LLM/AI crawlers ═══ */}
             <section
