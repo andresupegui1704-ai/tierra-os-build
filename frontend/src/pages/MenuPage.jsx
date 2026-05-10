@@ -32,6 +32,16 @@ const MenuPage = () => {
 
     return (
         <div data-testid="menu-page" className="bg-tierra-bg min-h-screen pt-2">
+            <SEO
+                title="Menù Tierra Organic Bistrot Roma | Poke Bowl, Colazione Bio, Aperitivo"
+                description="Il menù completo di Tierra Organic Bistrot: poke bowl personalizzabili da €13, avocado toast, colazione biologica, Aperitierra e piatti del giorno. Via Tirso 34, Roma — quartiere Parioli."
+                path="/menu"
+                schemas={[restaurantSchema(), menuSchema(items)]}
+                breadcrumbs={[
+                    { name: "Home", path: "/" },
+                    { name: "Menù", path: "/menu" },
+                ]}
+            />
             {/* ─── HERO — editorial magazine masthead ─── */}
             <section className="max-w-screen-xl mx-auto px-6 lg:px-12 pt-12 pb-16">
                 <div className="flex items-baseline gap-5 mb-10">

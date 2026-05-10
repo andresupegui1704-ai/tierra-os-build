@@ -1,6 +1,7 @@
 import React from "react";
 import "./App.css";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { HelmetProvider } from "react-helmet-async";
 import { Toaster } from "sonner";
 
 import { CartProvider } from "./context/CartContext";
@@ -35,7 +36,8 @@ const Chrome = ({ children }) => {
 function App() {
     return (
         <div className="App">
-            <BrowserRouter>
+            <HelmetProvider>
+                <BrowserRouter>
                 <CartProvider>
                     <Toaster position="top-right" richColors />
                     <Chrome>
@@ -51,6 +53,7 @@ function App() {
                     </Chrome>
                 </CartProvider>
             </BrowserRouter>
+            </HelmetProvider>
         </div>
     );
 }

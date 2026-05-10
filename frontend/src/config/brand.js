@@ -17,6 +17,11 @@ export const BRAND = {
     shortDescriptor: "organic · bistrot · café",
     sinceYear: "2019",
 
+    // ─── SEO / Site ────────────────────────────────────────────────
+    siteUrl: "https://www.tierrabistrot.com",   // production canonical
+    socialHandle: "@tierrabistrot",
+    geo: { lat: 41.9185, lng: 12.5128, postal: "00198", country: "IT", region: "IT-RM" },
+
     // ─── Contact ───────────────────────────────────────────────────
     address: {
         street: "Via Tirso 34",

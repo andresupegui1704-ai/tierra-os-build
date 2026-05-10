@@ -51,6 +51,14 @@ const Landing = () => {
 
     return (
         <div data-testid="landing-page" className="bg-tierra-bg text-tierra-ink">
+            <SEO
+                title="Tierra Organic Bistrot Roma | Bio · Parioli · Via Tirso 34"
+                description="Tierra è il bistrot biologico di Roma nel quartiere Parioli-Trieste. Poke bowl, avocado toast, colazione bio, aperitivo con dehor su Via Tirso 34. Prodotti 100% biologici. Aperto Lun–Dom."
+                path="/"
+                schemas={[restaurantSchema(), faqSchema()]}
+                breadcrumbs={[{ name: "Home", path: "/" }]}
+            />
+
             {/* ═══ 01 — EDITORIAL HERO ═══ */}
             <EditorialHero />
 
@@ -259,6 +267,59 @@ const Landing = () => {
             {/* ═══ 07 — GOOGLE REVIEW CTA ═══ */}
             <section className="max-w-screen-xl mx-auto px-6 lg:px-12 py-24">
                 <ReviewCTACard testId="landing-review-cta" />
+            </section>
+
+            {/* ═══ SEO SEMANTIC FOOTER — for LLM/AI crawlers ═══ */}
+            <section
+                aria-label="Chi siamo"
+                className="bg-tierra-bgDeep py-20 border-t border-tierra-ink/10"
+            >
+                <div className="max-w-screen-xl mx-auto px-6 lg:px-12 grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <article>
+                        <h2 className="overline mb-5">Chi siamo</h2>
+                        <p className="font-display text-2xl text-tierra-ink leading-snug mb-5">
+                            Tierra Organic Bistrot
+                        </p>
+                        <p className="text-tierra-ink2 leading-relaxed text-sm">
+                            Tierra Organic Bistrot è un bistrot biologico certificato aperto dal 2019 a Roma,
+                            in Via Tirso 34, nel quartiere Trieste-Parioli. Tutti gli ingredienti sono
+                            certificati biologici e selezionati da fornitori locali del Lazio. Il menù propone
+                            colazione biologica, poke bowl personalizzabili con proteine a scelta
+                            (carne, pesce, vegan), piatti del giorno con prodotti di stagione, e l'Aperitierra
+                            dalle 18:00. Il locale dispone di un dehor esterno con sedie da bistrot, piante e
+                            lampade in rattan — una delle terrazze più apprezzate del quartiere. Tierra è
+                            aperto tutti i giorni.
+                        </p>
+                    </article>
+                    <article lang="en">
+                        <h2 className="overline mb-5">About us</h2>
+                        <p className="font-display text-2xl text-tierra-ink leading-snug mb-5">
+                            English summary
+                        </p>
+                        <p className="text-tierra-ink2 leading-relaxed text-sm">
+                            Tierra Organic Bistrot is a certified organic restaurant in Rome, located at
+                            Via Tirso 34 in the Parioli-Trieste neighbourhood. Open since 2019, Tierra is
+                            one of the few fully certified organic eateries in Rome. The menu features
+                            customizable poke bowls, organic breakfast, daily specials made with seasonal
+                            produce, and an aperitivo hour (Aperitierra) with a beautiful outdoor terrace.
+                            All ingredients are certified organic and sourced from local Lazio suppliers.
+                            Open every day.
+                        </p>
+                    </article>
+                </div>
+
+                {/* Hidden-but-indexable SEO paragraph for keyword coverage */}
+                <p className="max-w-screen-xl mx-auto px-6 lg:px-12 mt-12 text-[11px] text-tierra-muted leading-relaxed">
+                    <strong>Tierra Organic Bistrot Roma</strong> — Ristorante biologico certificato nel
+                    quartiere Parioli-Trieste di Roma. Via Tirso 34, 00198 Roma. Ideale per pranzo sano
+                    a Roma nord, colazione biologica Roma, poke bowl Roma Parioli. Frequentato da
+                    lavoratori degli uffici della zona Trieste-Salario, expat internazionali, turisti
+                    in cerca di cibo sano a Roma, e appassionati di alimentazione biologica. Opzioni
+                    vegetariane, vegane e senza glutine disponibili ogni giorno. Prenotazione consigliata
+                    per il dehor. Aperitivo Aperitierra dalle 18:00 alle 20:00. Tag: ristorante bio Roma,
+                    organic restaurant Rome Italy, healthy lunch Rome Parioli, bistrot biologico Roma
+                    centro nord, poke bowl personalizzabile Roma, avocado toast Roma Parioli.
+                </p>
             </section>
         </div>
     );
