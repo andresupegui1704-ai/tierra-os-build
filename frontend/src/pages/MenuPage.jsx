@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import MenuRow from "../components/MenuRow";
 import SpecialsBanner from "../components/SpecialsBanner";
 import { ReviewCTACard, ReviewCTABanner } from "../components/ReviewCTA";
+import SEO, { menuSchema, restaurantSchema } from "../components/SEO";
 
 const MenuPage = () => {
     const [categories, setCategories] = useState([]);
