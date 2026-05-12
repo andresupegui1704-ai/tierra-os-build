@@ -22,7 +22,7 @@ console.log('[lark] Using LARK_HOST:', LARK_HOST);
 async function getTenantToken() {
   const now = Date.now();
   if (tokenCache.token && tokenCache.expiresAt > now + 60_000) {
-    console.log('[getTenantToken] Using cached token');
+    console.log('[getTenantToken] Token cached, expires in', Math.floor((tokenCache.expiresAt - now) / 1000), 'seconds');
     return tokenCache.token;
   }
 
@@ -41,7 +41,16 @@ async function getTenantToken() {
       }),
     });
 
-    const data = await res.json();
+    // FIX: Parse JSON safely, log raw response if it fails
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      const text = await res.text();
+      console.error('[getTenantToken] JSON parse error. Response text:', text.substring(0, 200));
+      throw new Error(`Lark response is not valid JSON: ${parseErr.message}`);
+    }
+
     console.log(`[getTenantToken] Response: status=${res.status}, code=${data.code}, msg=${data.msg}`);
 
     if (data.code !== 0) {
@@ -84,7 +93,16 @@ async function searchRecords(tableId, filterFormula = '', pageSize = 100) {
       },
     });
 
-    const data = await res.json();
+    // FIX: Parse JSON safely, log raw response if it fails
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      const text = await res.text();
+      console.error('[searchRecords] JSON parse error. Status:', res.status, 'Response text:', text.substring(0, 200));
+      throw new Error(`Lark searchRecords response is not valid JSON: ${parseErr.message}`);
+    }
+
     console.log(`[searchRecords] Response: status=${res.status}, code=${data.code}, msg=${data.msg}`);
 
     if (data.code !== 0) {
@@ -118,7 +136,15 @@ async function getRecord(tableId, recordId) {
       }
     );
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      const text = await res.text();
+      console.error('[getRecord] JSON parse error. Status:', res.status, 'Response text:', text.substring(0, 200));
+      throw new Error(`Lark getRecord response is not valid JSON: ${parseErr.message}`);
+    }
+
     if (data.code !== 0) {
       throw new Error(`Lark get record error code=${data.code} msg=${data.msg}`);
     }
@@ -151,9 +177,17 @@ async function createRecord(tableId, fields) {
       }
     );
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      const text = await res.text();
+      console.error('[createRecord] JSON parse error. Status:', res.status, 'Response text:', text.substring(0, 200));
+      throw new Error(`Lark createRecord response is not valid JSON: ${parseErr.message}`);
+    }
+
     if (data.code !== 0) {
-      throw new Error(`Lark create error code=${data.code} msg=${data.msg}`);
+      throw new Error(`Lark create record error code=${data.code} msg=${data.msg}`);
     }
 
     return data.data.record;
@@ -170,7 +204,7 @@ async function updateRecord(tableId, recordId, fields) {
   const token = await getTenantToken();
 
   try {
-    console.log(`[updateRecord] Updating record=${recordId}, table=${tableId}`);
+    console.log(`[updateRecord] Updating record=${recordId}, table=${tableId}, fields=${Object.keys(fields).join(',')}`);
     
     const res = await fetch(
       `${LARK_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records/${recordId}`,
@@ -184,9 +218,17 @@ async function updateRecord(tableId, recordId, fields) {
       }
     );
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      const text = await res.text();
+      console.error('[updateRecord] JSON parse error. Status:', res.status, 'Response text:', text.substring(0, 200));
+      throw new Error(`Lark updateRecord response is not valid JSON: ${parseErr.message}`);
+    }
+
     if (data.code !== 0) {
-      throw new Error(`Lark update error code=${data.code} msg=${data.msg}`);
+      throw new Error(`Lark update record error code=${data.code} msg=${data.msg}`);
     }
 
     return data.data.record;
@@ -197,44 +239,10 @@ async function updateRecord(tableId, recordId, fields) {
 }
 
 /**
- * Delete record in Lark Bitable
- */
-async function deleteRecord(tableId, recordId) {
-  const token = await getTenantToken();
-
-  try {
-    console.log(`[deleteRecord] Deleting record=${recordId}, table=${tableId}`);
-    
-    const res = await fetch(
-      `${LARK_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records/${recordId}`,
-      {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    const data = await res.json();
-    if (data.code !== 0) {
-      throw new Error(`Lark delete error code=${data.code} msg=${data.msg}`);
-    }
-
-    return true;
-  } catch (err) {
-    console.error('[deleteRecord] Exception:', err.message);
-    throw err;
-  }
-}
-
-/**
- * Utility: Convert JS Date to Lark date format (YYYY-MM-DD)
+ * Converte Date a formato Lark (timestamp in millisecondi)
  */
 function toLarkDate(date) {
-  if (!date) return null;
-  const d = new Date(date);
-  return d.toISOString().split('T')[0];
+  return Math.floor(date.getTime() / 1000);
 }
 
 module.exports = {
@@ -243,8 +251,5 @@ module.exports = {
   getRecord,
   createRecord,
   updateRecord,
-  deleteRecord,
   toLarkDate,
-  LARK_BASE_ID,
-  LARK_HOST,
 };
