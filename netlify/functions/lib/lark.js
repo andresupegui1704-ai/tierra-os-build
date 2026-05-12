@@ -41,13 +41,13 @@ async function getTenantToken() {
       }),
     });
 
-    // FIX: Parse JSON safely, log raw response if it fails
+    // FIX: Read body as text ONCE, then parse JSON
+    const bodyText = await res.text();
     let data;
     try {
-      data = await res.json();
+      data = JSON.parse(bodyText);
     } catch (parseErr) {
-      const text = await res.text();
-      console.error('[getTenantToken] JSON parse error. Response text:', text.substring(0, 200));
+      console.error('[getTenantToken] JSON parse error. Status:', res.status, 'Body:', bodyText.substring(0, 300));
       throw new Error(`Lark response is not valid JSON: ${parseErr.message}`);
     }
 
@@ -93,13 +93,13 @@ async function searchRecords(tableId, filterFormula = '', pageSize = 100) {
       },
     });
 
-    // FIX: Parse JSON safely, log raw response if it fails
+    // FIX: Read body as text ONCE, then parse JSON
+    const bodyText = await res.text();
     let data;
     try {
-      data = await res.json();
+      data = JSON.parse(bodyText);
     } catch (parseErr) {
-      const text = await res.text();
-      console.error('[searchRecords] JSON parse error. Status:', res.status, 'Response text:', text.substring(0, 200));
+      console.error('[searchRecords] JSON parse error. Status:', res.status, 'Body:', bodyText.substring(0, 300));
       throw new Error(`Lark searchRecords response is not valid JSON: ${parseErr.message}`);
     }
 
@@ -136,12 +136,12 @@ async function getRecord(tableId, recordId) {
       }
     );
 
+    const bodyText = await res.text();
     let data;
     try {
-      data = await res.json();
+      data = JSON.parse(bodyText);
     } catch (parseErr) {
-      const text = await res.text();
-      console.error('[getRecord] JSON parse error. Status:', res.status, 'Response text:', text.substring(0, 200));
+      console.error('[getRecord] JSON parse error. Status:', res.status, 'Body:', bodyText.substring(0, 300));
       throw new Error(`Lark getRecord response is not valid JSON: ${parseErr.message}`);
     }
 
@@ -177,12 +177,12 @@ async function createRecord(tableId, fields) {
       }
     );
 
+    const bodyText = await res.text();
     let data;
     try {
-      data = await res.json();
+      data = JSON.parse(bodyText);
     } catch (parseErr) {
-      const text = await res.text();
-      console.error('[createRecord] JSON parse error. Status:', res.status, 'Response text:', text.substring(0, 200));
+      console.error('[createRecord] JSON parse error. Status:', res.status, 'Body:', bodyText.substring(0, 300));
       throw new Error(`Lark createRecord response is not valid JSON: ${parseErr.message}`);
     }
 
@@ -218,12 +218,12 @@ async function updateRecord(tableId, recordId, fields) {
       }
     );
 
+    const bodyText = await res.text();
     let data;
     try {
-      data = await res.json();
+      data = JSON.parse(bodyText);
     } catch (parseErr) {
-      const text = await res.text();
-      console.error('[updateRecord] JSON parse error. Status:', res.status, 'Response text:', text.substring(0, 200));
+      console.error('[updateRecord] JSON parse error. Status:', res.status, 'Body:', bodyText.substring(0, 300));
       throw new Error(`Lark updateRecord response is not valid JSON: ${parseErr.message}`);
     }
 
