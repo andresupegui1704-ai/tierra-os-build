@@ -8,7 +8,7 @@ const LARK_APP_SECRET = process.env.LARK_APP_SECRET;
 const LARK_BASE_ID = process.env.LARK_BASE_ID;
 
 // CRITICAL: JP region only, no Feishu fallback
-const LARK_HOST = 'https://open.jp.larksuite.com';
+const LARK_HOST = 'https://open.larksuite.com';
 
 let tokenCache = { token: null, expiresAt: 0 };
 
