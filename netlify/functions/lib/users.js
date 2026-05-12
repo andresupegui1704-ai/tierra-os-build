@@ -19,21 +19,16 @@ async function findUserByEmail(email) {
   if (!email) return null;
   const normalized = String(email).trim().toLowerCase();
 
-  const items = await searchRecords(UTENTI_TABLE_ID, {
-    filter: {
-      conjunction: 'and',
-      conditions: [
-        {
-          field_name: 'email',
-          operator: 'is',
-          value: [normalized],
-        },
-      ],
-    },
+  // FIX: searchRecords aspetta stringa, non oggetto. Cerchiamo tutti poi filtriamo.
+  const items = await searchRecords(UTENTI_TABLE_ID, '');
+  if (!items || !items.length) return null;
+  
+  const item = items.find(record => {
+    const recordEmail = extractText(record.fields?.email || '').toLowerCase();
+    return recordEmail === normalized;
   });
-
-  if (!items.length) return null;
-  const item = items[0];
+  
+  if (!item) return null;
   return mapRecordToUser(item);
 }
 
@@ -44,20 +39,18 @@ async function findUserByEmail(email) {
  */
 async function findUserById(userId) {
   if (!userId) return null;
-  const items = await searchRecords(UTENTI_TABLE_ID, {
-    filter: {
-      conjunction: 'and',
-      conditions: [
-        {
-          field_name: 'user_id',
-          operator: 'is',
-          value: [userId],
-        },
-      ],
-    },
+  
+  // FIX: Same as above - searchRecords aspetta stringa
+  const items = await searchRecords(UTENTI_TABLE_ID, '');
+  if (!items || !items.length) return null;
+  
+  const item = items.find(record => {
+    const recordUserId = extractText(record.fields?.user_id || '');
+    return recordUserId === userId;
   });
-  if (!items.length) return null;
-  return mapRecordToUser(items[0]);
+  
+  if (!item) return null;
+  return mapRecordToUser(item);
 }
 
 /**
