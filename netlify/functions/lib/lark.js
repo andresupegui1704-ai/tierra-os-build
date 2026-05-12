@@ -1,14 +1,14 @@
 // netlify/functions/lib/lark.js
 // Client Lark Open API centralizzato
 // Tierra OS v9.5 — Security Hardening
-// FIX: JP LARK ONLY - Rimuove Feishu fallback
+// FIX: JP LARK SUBDOMAIN - pjpsysgnpdhz.jp.larksuite.com
 
 const LARK_APP_ID = process.env.LARK_APP_ID;
 const LARK_APP_SECRET = process.env.LARK_APP_SECRET;
 const LARK_BASE_ID = process.env.LARK_BASE_ID;
 
-// CRITICAL: JP region only, no Feishu fallback
-const LARK_HOST = 'https://open.larksuite.com';
+// CRITICAL: Use JP subdomain for this Lark instance
+const LARK_HOST = 'https://pjpsysgnpdhz.jp.larksuite.com';
 
 let tokenCache = { token: null, expiresAt: 0 };
 
@@ -41,7 +41,6 @@ async function getTenantToken() {
       }),
     });
 
-    // FIX: Read body as text ONCE, then parse JSON
     const bodyText = await res.text();
     let data;
     try {
@@ -93,7 +92,6 @@ async function searchRecords(tableId, filterFormula = '', pageSize = 100) {
       },
     });
 
-    // FIX: Read body as text ONCE, then parse JSON
     const bodyText = await res.text();
     let data;
     try {
