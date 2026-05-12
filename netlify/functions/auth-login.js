@@ -12,6 +12,8 @@ const { CORS_HEADERS } = require('./lib/auth-middleware');
 const MAX_FAILED_ATTEMPTS = 5;
 
 exports.handler = async (event) => {
+  console.log('[auth-login] START');
+  
   // CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS_HEADERS, body: '' };
@@ -26,11 +28,13 @@ exports.handler = async (event) => {
   }
 
   const meta = extractRequestMeta(event);
+  console.log('[auth-login] meta:', meta);
 
   let body;
   try {
     body = JSON.parse(event.body || '{}');
-  } catch {
+  } catch (err) {
+    console.error('[auth-login] JSON parse error:', err.message);
     return {
       statusCode: 400,
       headers: CORS_HEADERS,
@@ -40,8 +44,10 @@ exports.handler = async (event) => {
 
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
+  console.log('[auth-login] email:', email);
 
   if (!email || !password) {
+    console.log('[auth-login] missing credentials');
     return {
       statusCode: 400,
       headers: CORS_HEADERS,
@@ -51,9 +57,11 @@ exports.handler = async (event) => {
 
   let user;
   try {
+    console.log('[auth-login] calling findUserByEmail...');
     user = await findUserByEmail(email);
+    console.log('[auth-login] findUserByEmail result:', user ? 'found' : 'not found');
   } catch (err) {
-    console.error('[auth-login] findUserByEmail error:', err.message);
+    console.error('[auth-login] findUserByEmail error:', err.message, err.stack);
     return {
       statusCode: 500,
       headers: CORS_HEADERS,
@@ -69,24 +77,34 @@ exports.handler = async (event) => {
   };
 
   if (!user) {
-    await writeAuditLog({
-      user_id: 'anonymous',
-      action: 'login_failed',
-      resource: `email:${email}`,
-      ...meta,
-      metadata: { reason: 'user_not_found' },
-    });
+    console.log('[auth-login] user not found');
+    try {
+      await writeAuditLog({
+        user_id: 'anonymous',
+        action: 'login_failed',
+        resource: `email:${email}`,
+        ...meta,
+        metadata: { reason: 'user_not_found' },
+      });
+    } catch (auditErr) {
+      console.error('[auth-login] audit log error (user not found):', auditErr.message);
+    }
     return genericFail;
   }
 
   if (!user.active) {
-    await writeAuditLog({
-      user_id: user.user_id,
-      action: 'login_failed',
-      resource: `email:${email}`,
-      ...meta,
-      metadata: { reason: 'account_inactive' },
-    });
+    console.log('[auth-login] account inactive');
+    try {
+      await writeAuditLog({
+        user_id: user.user_id,
+        action: 'login_failed',
+        resource: `email:${email}`,
+        ...meta,
+        metadata: { reason: 'account_inactive' },
+      });
+    } catch (auditErr) {
+      console.error('[auth-login] audit log error (inactive):', auditErr.message);
+    }
     return {
       statusCode: 403,
       headers: CORS_HEADERS,
@@ -95,13 +113,18 @@ exports.handler = async (event) => {
   }
 
   if (user.failed_login_attempts >= MAX_FAILED_ATTEMPTS) {
-    await writeAuditLog({
-      user_id: user.user_id,
-      action: 'login_blocked',
-      resource: `email:${email}`,
-      ...meta,
-      metadata: { failed_attempts: user.failed_login_attempts },
-    });
+    console.log('[auth-login] account locked');
+    try {
+      await writeAuditLog({
+        user_id: user.user_id,
+        action: 'login_blocked',
+        resource: `email:${email}`,
+        ...meta,
+        metadata: { failed_attempts: user.failed_login_attempts },
+      });
+    } catch (auditErr) {
+      console.error('[auth-login] audit log error (locked):', auditErr.message);
+    }
     return {
       statusCode: 429,
       headers: CORS_HEADERS,
@@ -112,31 +135,40 @@ exports.handler = async (event) => {
     };
   }
 
+  console.log('[auth-login] verifying password...');
   const passwordOk = await verifyPassword(password, user.password_hash);
+  console.log('[auth-login] password result:', passwordOk);
 
   if (!passwordOk) {
+    console.log('[auth-login] wrong password');
     try {
       await incrementFailedLogins(user.record_id, user.failed_login_attempts);
     } catch (err) {
       console.error('[auth-login] incrementFailedLogins error:', err.message);
     }
-    await writeAuditLog({
-      user_id: user.user_id,
-      action: 'login_failed',
-      resource: `email:${email}`,
-      ...meta,
-      metadata: { reason: 'wrong_password', attempts: user.failed_login_attempts + 1 },
-    });
+    try {
+      await writeAuditLog({
+        user_id: user.user_id,
+        action: 'login_failed',
+        resource: `email:${email}`,
+        ...meta,
+        metadata: { reason: 'wrong_password', attempts: user.failed_login_attempts + 1 },
+      });
+    } catch (auditErr) {
+      console.error('[auth-login] audit log error (wrong password):', auditErr.message);
+    }
     return genericFail;
   }
 
   // Login OK
+  console.log('[auth-login] login success, marking login...');
   try {
     await markLoginSuccess(user.record_id);
   } catch (err) {
     console.error('[auth-login] markLoginSuccess error:', err.message);
   }
 
+  console.log('[auth-login] signing token...');
   const token = signToken({
     user_id: user.user_id,
     email: user.email,
@@ -144,13 +176,18 @@ exports.handler = async (event) => {
     name: user.name,
   });
 
-  await writeAuditLog({
-    user_id: user.user_id,
-    action: 'login_success',
-    resource: `email:${email}`,
-    ...meta,
-  });
+  try {
+    await writeAuditLog({
+      user_id: user.user_id,
+      action: 'login_success',
+      resource: `email:${email}`,
+      ...meta,
+    });
+  } catch (auditErr) {
+    console.error('[auth-login] audit log error (success):', auditErr.message);
+  }
 
+  console.log('[auth-login] returning success');
   return {
     statusCode: 200,
     headers: {
