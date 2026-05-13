@@ -7,13 +7,17 @@ const LARK_APP_ID = process.env.LARK_APP_ID;
 const LARK_APP_SECRET = process.env.LARK_APP_SECRET;
 const LARK_BASE_ID = process.env.LARK_BASE_ID;
 
-// CRITICAL: Use JP subdomain for this Lark instance
-const LARK_HOST = 'https://pjpsysgnpdhz.jp.larksuite.com';
+// CRITICAL: Split-host approach
+// Token endpoint = International (open.larksuite.com)
+// Data endpoints = JP region (pjpsysgnpdhz.jp.larksuite.com)
+const LARK_TOKEN_HOST = 'https://open.larksuite.com';
+const LARK_DATA_HOST = 'https://pjpsysgnpdhz.jp.larksuite.com';
 
 let tokenCache = { token: null, expiresAt: 0 };
 
 console.log('[lark] Module loaded. LARK_APP_ID:', LARK_APP_ID ? 'present' : 'MISSING');
-console.log('[lark] Using LARK_HOST:', LARK_HOST);
+console.log('[lark] LARK_TOKEN_HOST:', LARK_TOKEN_HOST);
+console.log('[lark] LARK_DATA_HOST:', LARK_DATA_HOST);
 
 /**
  * Recupera tenant_access_token Lark (JP region only)
@@ -31,8 +35,8 @@ async function getTenantToken() {
   }
 
   try {
-    console.log(`[getTenantToken] Fetching token from ${LARK_HOST}`);
-    const res = await fetch(`${LARK_HOST}/open-apis/auth/v3/tenant_access_token/internal`, {
+    console.log(`[getTenantToken] Fetching token from ${LARK_TOKEN_HOST}`);
+    const res = await fetch(`${LARK_TOKEN_HOST}/open-apis/auth/v3/tenant_access_token/internal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -78,7 +82,7 @@ async function searchRecords(tableId, filterFormula = '', pageSize = 100) {
   try {
     console.log(`[searchRecords] Searching table=${tableId}, base=${LARK_BASE_ID}, pageSize=${pageSize}`);
     
-    const url = new URL(`${LARK_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records`);
+    const url = new URL(`${LARK_DATA_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records`);
     if (filterFormula) {
       url.searchParams.set('filter', filterFormula);
     }
@@ -104,7 +108,7 @@ async function searchRecords(tableId, filterFormula = '', pageSize = 100) {
     console.log(`[searchRecords] Response: status=${res.status}, code=${data.code}, msg=${data.msg}`);
 
     if (data.code !== 0) {
-      throw new Error(`Lark search error code=${data.code} msg=${data.msg} (tableId=${tableId}, baseId=${LARK_BASE_ID}, host=${LARK_HOST})`);
+      throw new Error(`Lark search error code=${data.code} msg=${data.msg} (tableId=${tableId}, baseId=${LARK_BASE_ID}, host=${LARK_DATA_HOST})`);
     }
 
     return data.data.items || [];
@@ -124,7 +128,7 @@ async function getRecord(tableId, recordId) {
     console.log(`[getRecord] Fetching record=${recordId}, table=${tableId}`);
     
     const res = await fetch(
-      `${LARK_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records/${recordId}`,
+      `${LARK_DATA_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records/${recordId}`,
       {
         method: 'GET',
         headers: {
@@ -164,7 +168,7 @@ async function createRecord(tableId, fields) {
     console.log(`[createRecord] Creating in table=${tableId}, fields=${Object.keys(fields).join(',')}`);
     
     const res = await fetch(
-      `${LARK_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records`,
+      `${LARK_DATA_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records`,
       {
         method: 'POST',
         headers: {
@@ -205,7 +209,7 @@ async function updateRecord(tableId, recordId, fields) {
     console.log(`[updateRecord] Updating record=${recordId}, table=${tableId}, fields=${Object.keys(fields).join(',')}`);
     
     const res = await fetch(
-      `${LARK_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records/${recordId}`,
+      `${LARK_DATA_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records/${recordId}`,
       {
         method: 'PUT',
         headers: {
