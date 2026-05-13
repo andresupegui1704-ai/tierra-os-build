@@ -119,3 +119,34 @@ Sincronizzazione bidirezionale SITE ↔ OS:
 - **SDK aggiornato** (`/app/integrations/tierra_os/tierraApi.js`): auto-retry esponenziale, helper `newIdempotencyKey()`, nuovi metodi `getSyncSnapshot`/`pullOrders`/`replayPush`
 - Modulo `/app/backend/tierra_os_sync.py` configurato via env (`TIERRA_OS_BASE_URL`, `TIERRA_OS_SYNC_ENABLED`)
 - Guida completa in `/app/memory/TIERRA_OS_SYNC_V2.md`
+
+
+## Session Update — 2026-02 (fork pending)
+- **5 nuove immagini caricate** dall'utente mappate a: Moscow Mule, Primitivo (rosso), Passerina (bianco), Birra Giulia Blond, Aperitivo Formula (tagliere).
+- **Applicazione globale**: tutti i vini rossi (Primitivo, Montepulciano), bianchi (Passerina, Pinot Grigio, Sauvignon) e birre (Giulia Blond/Weiss/Amber) ricevono la rispettiva immagine.
+- **Aggiunto piatto**: `Pollo al Curry` in `piatti-del-giorno` (badge "Special", €16.00) con illustrazione chicken curry esistente.
+- **Bug grave fixed**: filtro Mongo `update_many` con chiave dict duplicata ha sovrascritto 71 items con immagine cornetto. Recovery script `/app/backend/restore_images.py` rimappa per nome (colazione/bowls/piatti) — funzionante.
+- **Aperitierra: immagini cocktail/bites resettate a placeholder** (Unsplash neutri) — `Gin Tonic, Negroni, Negroni Sbagliato, Americano, Aperol Spritz, Campari Spritz, London Mule, Whisky Sour, Disaronno Sour, Hugo Spritz, Premium Gin Tonic, Mocktail, Eggplant Parmigiana, Bruschetta, Tempura di Cardoncelli, Tempura di Gamberi, Polpette di Melanzane, Tagliere di Formaggi, Tagliere Salumi & Formaggi`. Da ricaricare dall'utente.
+- **Confermate immagini Aperitierra**: vini rossi, vini bianchi, birre, Aperitivo Formula, Moscow Mule.
+- **Swap**: Tierra Plate ora usa Medium_meat_bowl; Large Bowl usa Large_seafood_bowl.
+- **Roast Beef Plate**: usa `Brioche_sandwich_with_roast_beef_and_mustard`.
+- **Tooling**: `/app/backend/restore_images.py` — script di restore mappa nome→URL artifact. Utile per future sovrascritture.
+
+### Pending per prossimo fork
+- P0: l'utente deve ricaricare immagini Aperitierra (cocktail + bites) singolarmente e mapparle 1:1.
+- P0: Token discipline rigorosa (l'utente ha lamentato consumo elevato).
+- P1: Blog SEO/LLMO (6 articoli pendenti).
+- P1: Refactor `server.py` (~1800 righe → routers separati).
+- P1: Tierra OS — attesa URL Netlify + token UUID dall'utente.
+- P2: Resend API key, Twilio credenziali, dominio `tierraorganic.it`, Sunmi printer test locale.
+
+### Lezione appresa
+**Mai usare dict literal con chiavi duplicate in filtri Mongo**: Python tiene solo l'ultima. Esempio errato:
+```python
+{"name": {"$regex": "Cornetto"}, "name": {"$ne": "Cornetto Classico"}}  # ⚠ filtro = solo $ne
+```
+Corretto:
+```python
+{"name": {"$regex": "^Cornetto", "$options": "i", "$ne": "Cornetto Classico"}}
+# o con $and esplicito
+```
