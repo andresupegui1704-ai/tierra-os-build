@@ -1,28 +1,19 @@
 // netlify/functions/lib/lark.js
 // Client Lark Open API centralizzato
-// Tierra OS v9.5 — Security Hardening
-// FIX: JP LARK SUBDOMAIN - pjpsysgnpdhz.jp.larksuite.com
+// Tierra OS v9.5 — Fixed searchRecords (POST v1 endpoint)
 
 const LARK_APP_ID = process.env.LARK_APP_ID;
 const LARK_APP_SECRET = process.env.LARK_APP_SECRET;
 const LARK_BASE_ID = process.env.LARK_BASE_ID;
 
-// CRITICAL: Split-host approach
-// Token endpoint = International (open.larksuite.com)
-// Data endpoints = JP region (pjpsysgnpdhz.jp.larksuite.com)
-const LARK_TOKEN_HOST = 'https://open.larksuite.com';
-const LARK_DATA_HOST = 'https://pjpsysgnpdhz.jp.larksuite.com';
+const LARK_HOST = 'https://open.larksuite.com';
 
 let tokenCache = { token: null, expiresAt: 0 };
 
 console.log('[lark] Module loaded. LARK_APP_ID:', LARK_APP_ID ? 'present' : 'MISSING');
-console.log('[lark] LARK_TOKEN_HOST:', LARK_TOKEN_HOST);
-console.log('[lark] LARK_DATA_HOST:', LARK_DATA_HOST);
+console.log('[lark] LARK_HOST:', LARK_HOST);
+console.log('[lark] LARK_BASE_ID:', LARK_BASE_ID ? LARK_BASE_ID.substring(0, 8) + '...' : 'MISSING');
 
-/**
- * Recupera tenant_access_token Lark (JP region only)
- * @returns {Promise<string>}
- */
 async function getTenantToken() {
   const now = Date.now();
   if (tokenCache.token && tokenCache.expiresAt > now + 60_000) {
@@ -35,8 +26,8 @@ async function getTenantToken() {
   }
 
   try {
-    console.log(`[getTenantToken] Fetching token from ${LARK_TOKEN_HOST}`);
-    const res = await fetch(`${LARK_TOKEN_HOST}/open-apis/auth/v3/tenant_access_token/internal`, {
+    console.log(`[getTenantToken] Fetching token from ${LARK_HOST}`);
+    const res = await fetch(`${LARK_HOST}/open-apis/auth/v3/tenant_access_token/internal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -50,11 +41,11 @@ async function getTenantToken() {
     try {
       data = JSON.parse(bodyText);
     } catch (parseErr) {
-      console.error('[getTenantToken] JSON parse error. Status:', res.status, 'Body:', bodyText.substring(0, 300));
-      throw new Error(`Lark response is not valid JSON: ${parseErr.message}`);
+      console.error('[getTenantToken] JSON parse error. Status:', res.status);
+      throw new Error(`Lark token response is not valid JSON`);
     }
 
-    console.log(`[getTenantToken] Response: status=${res.status}, code=${data.code}, msg=${data.msg}`);
+    console.log(`[getTenantToken] Response: status=${res.status}, code=${data.code}`);
 
     if (data.code !== 0) {
       throw new Error(`Lark auth failed: code=${data.code} msg=${data.msg}`);
@@ -65,7 +56,6 @@ async function getTenantToken() {
       expiresAt: now + (data.expire * 1000),
     };
 
-    console.log('[getTenantToken] Token cached, expires in', data.expire, 'seconds');
     return tokenCache.token;
   } catch (err) {
     console.error('[getTenantToken] Error:', err.message);
@@ -73,22 +63,66 @@ async function getTenantToken() {
   }
 }
 
-/**
- * Search records in Lark Bitable
- */
-async function searchRecords(tableId, filterFormula = '', pageSize = 100) {
+async function searchRecords(tableId, filterOrPayload = {}, pageSize = 100) {
+  const token = await getTenantToken();
+
+  let requestBody;
+  if (typeof filterOrPayload === 'string') {
+    console.log(`[searchRecords] Legacy string filter detected`);
+    requestBody = { page_size: pageSize };
+  } else if (filterOrPayload && typeof filterOrPayload === 'object') {
+    requestBody = {
+      page_size: filterOrPayload.page_size || pageSize,
+      ...filterOrPayload,
+    };
+  } else {
+    requestBody = { page_size: pageSize };
+  }
+
+  try {
+    console.log(`[searchRecords] table=${tableId}, base=${LARK_BASE_ID}`);
+    
+    const url = `${LARK_HOST}/open-apis/bitable/v1/apps/${LARK_BASE_ID}/tables/${tableId}/records/search`;
+    
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    const bodyText = await res.text();
+    let data;
+    try {
+      data = JSON.parse(bodyText);
+    } catch (parseErr) {
+      console.error('[searchRecords] JSON parse error. Status:', res.status);
+      throw new Error(`Lark searchRecords response is not valid JSON`);
+    }
+
+    console.log(`[searchRecords] Response: status=${res.status}, code=${data.code}, items=${data?.data?.items?.length || 0}`);
+
+    if (data.code !== 0) {
+      throw new Error(`Lark search error code=${data.code} msg=${data.msg}`);
+    }
+
+    return data.data.items || [];
+  } catch (err) {
+    console.error('[searchRecords] Exception:', err.message);
+    throw err;
+  }
+}
+
+async function getRecord(tableId, recordId) {
   const token = await getTenantToken();
 
   try {
-    console.log(`[searchRecords] Searching table=${tableId}, base=${LARK_BASE_ID}, pageSize=${pageSize}`);
+    console.log(`[getRecord] Fetching record=${recordId}, table=${tableId}`);
     
-    const url = new URL(`${LARK_DATA_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records`);
-    if (filterFormula) {
-      url.searchParams.set('filter', filterFormula);
-    }
-    url.searchParams.set('page_size', pageSize);
-
-    const res = await fetch(url.toString(), {
+    const url = `${LARK_HOST}/open-apis/bitable/v1/apps/${LARK_BASE_ID}/tables/${tableId}/records/${recordId}`;
+    const res = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -101,54 +135,11 @@ async function searchRecords(tableId, filterFormula = '', pageSize = 100) {
     try {
       data = JSON.parse(bodyText);
     } catch (parseErr) {
-      console.error('[searchRecords] JSON parse error. Status:', res.status, 'Body:', bodyText.substring(0, 300));
-      throw new Error(`Lark searchRecords response is not valid JSON: ${parseErr.message}`);
-    }
-
-    console.log(`[searchRecords] Response: status=${res.status}, code=${data.code}, msg=${data.msg}`);
-
-    if (data.code !== 0) {
-      throw new Error(`Lark search error code=${data.code} msg=${data.msg} (tableId=${tableId}, baseId=${LARK_BASE_ID}, host=${LARK_DATA_HOST})`);
-    }
-
-    return data.data.items || [];
-  } catch (err) {
-    console.error('[searchRecords] Exception:', err.message);
-    throw err;
-  }
-}
-
-/**
- * Get single record by ID
- */
-async function getRecord(tableId, recordId) {
-  const token = await getTenantToken();
-
-  try {
-    console.log(`[getRecord] Fetching record=${recordId}, table=${tableId}`);
-    
-    const res = await fetch(
-      `${LARK_DATA_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records/${recordId}`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    const bodyText = await res.text();
-    let data;
-    try {
-      data = JSON.parse(bodyText);
-    } catch (parseErr) {
-      console.error('[getRecord] JSON parse error. Status:', res.status, 'Body:', bodyText.substring(0, 300));
-      throw new Error(`Lark getRecord response is not valid JSON: ${parseErr.message}`);
+      throw new Error(`Lark getRecord response is not valid JSON`);
     }
 
     if (data.code !== 0) {
-      throw new Error(`Lark get record error code=${data.code} msg=${data.msg}`);
+      throw new Error(`Lark get record error code=${data.code}`);
     }
 
     return data.data.record;
@@ -158,38 +149,34 @@ async function getRecord(tableId, recordId) {
   }
 }
 
-/**
- * Create record in Lark Bitable
- */
 async function createRecord(tableId, fields) {
   const token = await getTenantToken();
 
   try {
-    console.log(`[createRecord] Creating in table=${tableId}, fields=${Object.keys(fields).join(',')}`);
+    console.log(`[createRecord] table=${tableId}, fields=${Object.keys(fields).join(',')}`);
     
-    const res = await fetch(
-      `${LARK_DATA_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ fields }),
-      }
-    );
+    const url = `${LARK_HOST}/open-apis/bitable/v1/apps/${LARK_BASE_ID}/tables/${tableId}/records`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({ fields }),
+    });
 
     const bodyText = await res.text();
     let data;
     try {
       data = JSON.parse(bodyText);
     } catch (parseErr) {
-      console.error('[createRecord] JSON parse error. Status:', res.status, 'Body:', bodyText.substring(0, 300));
-      throw new Error(`Lark createRecord response is not valid JSON: ${parseErr.message}`);
+      throw new Error(`Lark createRecord response is not valid JSON`);
     }
 
+    console.log(`[createRecord] Response: status=${res.status}, code=${data.code}`);
+
     if (data.code !== 0) {
-      throw new Error(`Lark create record error code=${data.code} msg=${data.msg}`);
+      throw new Error(`Lark create record error code=${data.code}`);
     }
 
     return data.data.record;
@@ -199,38 +186,32 @@ async function createRecord(tableId, fields) {
   }
 }
 
-/**
- * Update record in Lark Bitable
- */
 async function updateRecord(tableId, recordId, fields) {
   const token = await getTenantToken();
 
   try {
-    console.log(`[updateRecord] Updating record=${recordId}, table=${tableId}, fields=${Object.keys(fields).join(',')}`);
+    console.log(`[updateRecord] record=${recordId}, table=${tableId}`);
     
-    const res = await fetch(
-      `${LARK_DATA_HOST}/open-apis/bitable/v3/apps/${LARK_BASE_ID}/tables/${tableId}/records/${recordId}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ fields }),
-      }
-    );
+    const url = `${LARK_HOST}/open-apis/bitable/v1/apps/${LARK_BASE_ID}/tables/${tableId}/records/${recordId}`;
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({ fields }),
+    });
 
     const bodyText = await res.text();
     let data;
     try {
       data = JSON.parse(bodyText);
     } catch (parseErr) {
-      console.error('[updateRecord] JSON parse error. Status:', res.status, 'Body:', bodyText.substring(0, 300));
-      throw new Error(`Lark updateRecord response is not valid JSON: ${parseErr.message}`);
+      throw new Error(`Lark updateRecord response is not valid JSON`);
     }
 
     if (data.code !== 0) {
-      throw new Error(`Lark update record error code=${data.code} msg=${data.msg}`);
+      throw new Error(`Lark update record error code=${data.code}`);
     }
 
     return data.data.record;
@@ -240,9 +221,6 @@ async function updateRecord(tableId, recordId, fields) {
   }
 }
 
-/**
- * Converte Date a formato Lark (timestamp in millisecondi)
- */
 function toLarkDate(date) {
   return Math.floor(date.getTime() / 1000);
 }
@@ -255,3 +233,7 @@ module.exports = {
   updateRecord,
   toLarkDate,
 };
+ENDFILEgit add netlify/functions/lib/lark.js
+git commit -m "fix(lark): use POST search v1 endpoint and open.larksuite.com host"
+git push origin main
+
