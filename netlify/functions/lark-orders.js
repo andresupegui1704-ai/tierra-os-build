@@ -6,11 +6,11 @@ const { getTenantToken, createRecord, searchRecords, updateRecord } = require('.
 const { verifyToken } = require('./lib/jwt');
 const { writeAuditLog, extractRequestMeta } = require('./lib/audit-log');
 
-const LARK_ORDERS_TABLE_ID = process.env.LARK_ORDERS_TABLE_ID;
+const LARK_ORDINI_TABLE_ID = process.env.LARK_ORDINI_TABLE_ID;
 const LARK_PRENOTAZIONI_TABLE_ID = process.env.LARK_PRENOTAZIONI_TABLE_ID;
 
 console.log('[lark-orders] Module loaded. Tables:', {
-  orders: LARK_ORDERS_TABLE_ID,
+  orders: LARK_ORDINI_TABLE_ID,
   prenotazioni: LARK_PRENOTAZIONI_TABLE_ID,
 });
 
@@ -82,8 +82,8 @@ exports.handler = async (event) => {
       };
     }
 
-    if (!LARK_ORDERS_TABLE_ID) {
-      console.error('[lark-orders] LARK_ORDERS_TABLE_ID not configured');
+    if (!LARK_ORDINI_TABLE_ID) {
+      console.error('[lark-orders] LARK_ORDINI_TABLE_ID not configured');
       return {
         statusCode: 500,
         body: JSON.stringify({ error: 'orders_table_not_configured' }),
@@ -94,7 +94,7 @@ exports.handler = async (event) => {
     const idempotencyKey = event.headers['x-idempotency-key'];
     console.log('[lark-orders] Idempotency key:', idempotencyKey);
 
-    const existingOrders = await searchRecords(LARK_ORDERS_TABLE_ID, {
+    const existingOrders = await searchRecords(LARK_ORDINI_TABLE_ID, {
       filter: {
         conjunction: 'and',
         conditions: [
@@ -123,7 +123,7 @@ exports.handler = async (event) => {
     const now = new Date().toISOString();
     const itemsJson = JSON.stringify(items);
 
-    const orderRecord = await createRecord(LARK_ORDERS_TABLE_ID, {
+    const orderRecord = await createRecord(LARK_ORDINI_TABLE_ID, {
       order_id: order_id,
       customer_name: customer_name || 'N/A',
       customer_phone: customer_phone || '',
