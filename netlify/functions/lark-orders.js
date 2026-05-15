@@ -1,23 +1,17 @@
 // netlify/functions/lark-orders.js
-// Production-ready webhook receiver for menu site orders
-// Tierra OS v9.5
+// Tierra OS v9.5 — Webhook receiver for menu site orders
 
-const { getTenantToken, createRecord, searchRecords, updateRecord } = require('./lib/lark');
-const { verifyToken } = require('./lib/jwt');
-const { writeAuditLog, extractRequestMeta } = require('./lib/audit-log');
+const { createRecord, searchRecords, updateRecord } = require('./lib/lark');
 
-const LARK_ORDINI_TABLE_ID = process.env.LARK_ORDINI_TABLE_ID;
+const LARK_ORDERS_TABLE_ID = process.env.LARK_ORDINI_TABLE_ID;
 const LARK_PRENOTAZIONI_TABLE_ID = process.env.LARK_PRENOTAZIONI_TABLE_ID;
 
 console.log('[lark-orders] Module loaded. Tables:', {
-  orders: LARK_ORDINI_TABLE_ID,
+  orders: LARK_ORDERS_TABLE_ID,
   prenotazioni: LARK_PRENOTAZIONI_TABLE_ID,
 });
 
 exports.handler = async (event) => {
-  const meta = extractRequestMeta(event);
-
-  // CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
@@ -39,38 +33,31 @@ exports.handler = async (event) => {
   }
 
   try {
-    // ===== 1. PARSE INPUT =====
     let body;
     try {
       body = JSON.parse(event.body || '{}');
-    } catch {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'invalid_json' }),
-      };
+    } catch (e) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'invalid_json' }) };
     }
 
-    const {
-      order_id,
-      customer_name,
-      customer_phone,
-      service_type,
-      items,
-      total,
-      delivery_address,
-      notes,
-      reservation_id,
-    } = body;
+    const order_id = body.order_id;
+    const customer_name = body.customer_name;
+    const customer_phone = body.customer_phone;
+    const service_type = body.service_type;
+    const items = body.items;
+    const total = body.total;
+    const delivery_address = body.delivery_address;
+    const notes = body.notes;
+    const reservation_id = body.reservation_id;
 
     console.log('[lark-orders] Received order:', {
-      order_id,
-      customer_name,
-      items_count: items?.length,
-      total,
-      service_type,
+      order_id: order_id,
+      customer_name: customer_name,
+      items_count: items ? items.length : 0,
+      total: total,
+      service_type: service_type,
     });
 
-    // ===== 2. VALIDATE REQUIRED FIELDS =====
     if (!order_id || !items || !Array.isArray(items) || items.length === 0 || total === undefined) {
       console.error('[lark-orders] Missing required fields');
       return {
@@ -82,7 +69,7 @@ exports.handler = async (event) => {
       };
     }
 
-    if (!LARK_ORDINI_TABLE_ID) {
+    if (!LARK_ORDERS_TABLE_ID) {
       console.error('[lark-orders] LARK_ORDINI_TABLE_ID not configured');
       return {
         statusCode: 500,
@@ -90,22 +77,29 @@ exports.handler = async (event) => {
       };
     }
 
-    // ===== 3. IDEMPOTENCY CHECK =====
-    const idempotencyKey = event.headers['x-idempotency-key'];
-    console.log('[lark-orders] Idempotency key:', idempotencyKey);
-
-    const existingOrders = await searchRecords(LARK_ORDINI_TABLE_ID, {
-      filter: {
-        conjunction: 'and',
-        conditions: [
-          {
-            field_name: 'order_id',
-            operator: 'is',
-            value: [order_id],
-          },
-        ],
-      },
-    });
+    // IDEMPOTENCY CHECK using v1 search with proper filter syntax
+    let existingOrders = [];
+    try {
+      const searchPayload = {
+        filter: {
+          conjunction: 'and',
+          conditions: [
+            {
+              field_name: 'order_id',
+              operator: 'is',
+              value: [order_id],
+            },
+          ],
+        },
+        page_size: 10,
+      };
+      existingOrders = await searchRecords(LARK_ORDERS_TABLE_ID, searchPayload);
+      console.log('[lark-orders] Idempotency check: found ' + existingOrders.length + ' existing orders');
+    } catch (searchErr) {
+      console.error('[lark-orders] Search failed (continuing anyway):', searchErr.message);
+      // Don't fail the whole order if idempotency check fails
+      // Better to potentially create a duplicate than to drop the order
+    }
 
     if (existingOrders.length > 0) {
       console.log('[lark-orders] Order already exists (idempotency):', order_id);
@@ -113,89 +107,43 @@ exports.handler = async (event) => {
         statusCode: 200,
         body: JSON.stringify({
           message: 'order_already_exists',
-          order_id,
+          order_id: order_id,
           record_id: existingOrders[0].record_id,
         }),
       };
     }
 
-    // ===== 4. CREATE LARK RECORD =====
+    // CREATE LARK RECORD
     const now = new Date().toISOString();
     const itemsJson = JSON.stringify(items);
 
-    const orderRecord = await createRecord(LARK_ORDINI_TABLE_ID, {
+    const fields = {
       order_id: order_id,
       customer_name: customer_name || 'N/A',
       customer_phone: customer_phone || '',
       service_type: service_type || 'asporto',
-      items_json: itemsJson,
-      total: total,
+      items: itemsJson,
+      total_amount: total,
       delivery_address: delivery_address || '',
       notes: notes || '',
-      status: 'confirmed',
-      created_at: now,
+      status: 'pending',
+      payment_status: 'unpaid',
+      created_at: Date.now(),
       reservation_id: reservation_id || '',
-    });
+    };
+
+    console.log('[lark-orders] Creating record with fields:', Object.keys(fields).join(','));
+
+    const orderRecord = await createRecord(LARK_ORDERS_TABLE_ID, fields);
 
     console.log('[lark-orders] Created Lark record:', orderRecord.record_id);
 
-    // ===== 5. LINK TO RESERVATION (if provided) =====
-    if (reservation_id && LARK_PRENOTAZIONI_TABLE_ID) {
-      try {
-        const reservations = await searchRecords(LARK_PRENOTAZIONI_TABLE_ID, {
-          filter: {
-            conjunction: 'and',
-            conditions: [
-              {
-                field_name: 'booking_id',
-                operator: 'is',
-                value: [reservation_id],
-              },
-            ],
-          },
-        });
-
-        if (reservations.length > 0) {
-          const resRecord = reservations[0];
-          await updateRecord(LARK_PRENOTAZIONI_TABLE_ID, resRecord.record_id, {
-            order_id: order_id,
-            status: 'order_confirmed',
-          });
-          console.log('[lark-orders] Linked order to reservation:', reservation_id);
-        }
-      } catch (err) {
-        console.error('[lark-orders] Error linking reservation:', err.message);
-        // Don't fail order if linking fails
-      }
-    }
-
-    // ===== 6. WRITE AUDIT LOG =====
-    try {
-      await writeAuditLog({
-        action: 'order_received',
-        user_id: 'menu-site',
-        resource: 'order',
-        resource_id: order_id,
-        details: {
-          items_count: items.length,
-          total,
-          service_type,
-          source: 'menu_site',
-        },
-      });
-      console.log('[lark-orders] Audit log written');
-    } catch (auditErr) {
-      console.error('[lark-orders] Audit log error:', auditErr.message);
-      // Don't fail if audit fails
-    }
-
-    // ===== 7. SUCCESS RESPONSE =====
     return {
       statusCode: 201,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         success: true,
-        order_id,
+        order_id: order_id,
         record_id: orderRecord.record_id,
         message: 'Order received and logged',
         timestamp: now,
@@ -203,6 +151,7 @@ exports.handler = async (event) => {
     };
   } catch (error) {
     console.error('[lark-orders] Unexpected error:', error);
+    console.error('[lark-orders] Stack:', error.stack);
     return {
       statusCode: 500,
       body: JSON.stringify({
