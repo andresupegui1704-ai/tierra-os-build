@@ -1,0 +1,4 @@
+LARK_SCHEMA.json
+.env
+.env.example
+.env.local
