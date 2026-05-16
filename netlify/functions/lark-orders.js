@@ -1,15 +1,11 @@
 // netlify/functions/lark-orders.js
 // Tierra OS v9.5 — Webhook receiver for menu site orders
 
-const { createRecord, searchRecords, updateRecord } = require('./lib/lark');
+const { createRecord, searchRecords } = require('./lib/lark');
 
 const LARK_ORDERS_TABLE_ID = process.env.LARK_ORDINI_TABLE_ID;
-const LARK_PRENOTAZIONI_TABLE_ID = process.env.LARK_PRENOTAZIONI_TABLE_ID;
 
-console.log('[lark-orders] Module loaded. Tables:', {
-  orders: LARK_ORDERS_TABLE_ID,
-  prenotazioni: LARK_PRENOTAZIONI_TABLE_ID,
-});
+console.log('[lark-orders] Module loaded. Orders table:', LARK_ORDERS_TABLE_ID);
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -40,22 +36,14 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'invalid_json' }) };
     }
 
-    const order_id = body.order_id;
-    const customer_name = body.customer_name;
-    const customer_phone = body.customer_phone;
-    const service_type = body.service_type;
-    const items = body.items;
-    const total = body.total;
-    const delivery_address = body.delivery_address;
-    const notes = body.notes;
-    const reservation_id = body.reservation_id;
+    const { order_id, customer_name, customer_phone, service_type, items, total, delivery_address, notes, reservation_id } = body;
 
     console.log('[lark-orders] Received order:', {
-      order_id: order_id,
-      customer_name: customer_name,
+      order_id,
+      customer_name,
       items_count: items ? items.length : 0,
-      total: total,
-      service_type: service_type,
+      total,
+      service_type,
     });
 
     if (!order_id || !items || !Array.isArray(items) || items.length === 0 || total === undefined) {
@@ -77,10 +65,10 @@ exports.handler = async (event) => {
       };
     }
 
-    // IDEMPOTENCY CHECK using v1 search with proper filter syntax
+    // IDEMPOTENCY CHECK
     let existingOrders = [];
     try {
-      const searchPayload = {
+      existingOrders = await searchRecords(LARK_ORDERS_TABLE_ID, {
         filter: {
           conjunction: 'and',
           conditions: [
@@ -92,13 +80,10 @@ exports.handler = async (event) => {
           ],
         },
         page_size: 10,
-      };
-      existingOrders = await searchRecords(LARK_ORDERS_TABLE_ID, searchPayload);
+      });
       console.log('[lark-orders] Idempotency check: found ' + existingOrders.length + ' existing orders');
     } catch (searchErr) {
       console.error('[lark-orders] Search failed (continuing anyway):', searchErr.message);
-      // Don't fail the whole order if idempotency check fails
-      // Better to potentially create a duplicate than to drop the order
     }
 
     if (existingOrders.length > 0) {
@@ -107,7 +92,7 @@ exports.handler = async (event) => {
         statusCode: 200,
         body: JSON.stringify({
           message: 'order_already_exists',
-          order_id: order_id,
+          order_id,
           record_id: existingOrders[0].record_id,
         }),
       };
@@ -122,13 +107,14 @@ exports.handler = async (event) => {
       customer_name: customer_name || 'N/A',
       customer_phone: customer_phone || '',
       service_type: service_type || 'asporto',
-      items: itemsJson,
+      items_json: itemsJson,
       total_amount: total,
       delivery_address: delivery_address || '',
       notes: notes || '',
       status: 'pending',
       payment_status: 'unpaid',
-      created_at: Date.now(),
+      created_at: Math.floor(Date.now() / 1000),
+      created_by: 'menu-site',
       reservation_id: reservation_id || '',
     };
 
@@ -143,7 +129,7 @@ exports.handler = async (event) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         success: true,
-        order_id: order_id,
+        order_id,
         record_id: orderRecord.record_id,
         message: 'Order received and logged',
         timestamp: now,
