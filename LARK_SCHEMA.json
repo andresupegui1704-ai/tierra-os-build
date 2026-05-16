@@ -1,0 +1,61 @@
+{
+  "app_id": "cli_a96eb75ba5e1de17",
+  "app_secret": "vTQbEsXwKMwoTcvsRg93agZww1nzMAQS",
+  "base_id": "DWpvwpxsViYlMskDFr6jrUccpug",
+  "lark_host": "https://open.feishu.cn",
+  "tables": [
+    {
+      "name": "Ordini",
+      "table_id": "tbllWx1VealRRlie",
+      "description": "Orders from menu site",
+      "fields": [
+        {"field_name": "order_id", "type": 1, "ui_type": "Text", "primary": true},
+        {"field_name": "customer_name", "type": 1, "ui_type": "Text"},
+        {"field_name": "customer_phone", "type": 1, "ui_type": "Text"},
+        {"field_name": "service_type", "type": 1, "ui_type": "Text"},
+        {"field_name": "items_json", "type": 1, "ui_type": "Text"},
+        {"field_name": "total_amount", "type": 2, "ui_type": "Number"},
+        {"field_name": "status", "type": 3, "ui_type": "SingleSelect", "options": ["pending", "confirmed", "ready", "delivered", "paid", "cancelled"]},
+        {"field_name": "payment_status", "type": 3, "ui_type": "SingleSelect", "options": ["unpaid", "paid", "refunded"]},
+        {"field_name": "delivery_address", "type": 1, "ui_type": "Text"},
+        {"field_name": "notes", "type": 1, "ui_type": "Text"},
+        {"field_name": "created_at", "type": 5, "ui_type": "DateTime"},
+        {"field_name": "created_by", "type": 1, "ui_type": "Text"},
+        {"field_name": "reservation_id", "type": 1, "ui_type": "Text"}
+      ]
+    },
+    {
+      "name": "Prenotazioni",
+      "table_id": "tblOgh7af4rT5IHY",
+      "description": "Reservations",
+      "fields": [
+        {"field_name": "booking_id", "type": 1, "ui_type": "Text", "primary": true},
+        {"field_name": "customer_name", "type": 1, "ui_type": "Text"},
+        {"field_name": "customer_phone", "type": 1, "ui_type": "Text"},
+        {"field_name": "email", "type": 1, "ui_type": "Text"},
+        {"field_name": "date", "type": 1, "ui_type": "Text"},
+        {"field_name": "time", "type": 1, "ui_type": "Text"},
+        {"field_name": "guests", "type": 2, "ui_type": "Number"},
+        {"field_name": "table_id", "type": 1, "ui_type": "Text"},
+        {"field_name": "status", "type": 3, "ui_type": "SingleSelect", "options": ["pending", "confirmed", "seated", "completed", "cancelled"]},
+        {"field_name": "notes", "type": 1, "ui_type": "Text"},
+        {"field_name": "order_id", "type": 1, "ui_type": "Text"},
+        {"field_name": "created_at", "type": 5, "ui_type": "DateTime"}
+      ]
+    },
+    {
+      "name": "Utenti",
+      "table_id": "tblmqpbrAbjKGW8n",
+      "description": "Users and staff",
+      "fields": [
+        {"field_name": "user_id", "type": 1, "ui_type": "Text", "primary": true},
+        {"field_name": "nome", "type": 1, "ui_type": "Text"},
+        {"field_name": "email", "type": 1, "ui_type": "Text"},
+        {"field_name": "password_hash", "type": 1, "ui_type": "Text"},
+        {"field_name": "role", "type": 3, "ui_type": "SingleSelect", "options": ["owner", "manager", "staff", "waiter"]},
+        {"field_name": "active", "type": 3, "ui_type": "SingleSelect", "options": ["sì", "no"]},
+        {"field_name": "created_at", "type": 5, "ui_type": "DateTime"}
+      ]
+    }
+  ]
+}
