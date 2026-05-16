@@ -91,7 +91,7 @@ function mapRecordToUser(item) {
     password_hash: extractText(f.password_hash),
     name: extractText(f.name),
     role: extractSelect(f.role),
-    active: f.active === true || f.active === 'true' || f.active === 1,
+    active: f.active === true || f.active === 'true' || f.active === 1 || f.active === 'sì' || f.active === 'si' || f.active === 'yes',
     failed_login_attempts: typeof f.failed_login_attempts === 'number' ? f.failed_login_attempts : 0,
   };
 }
