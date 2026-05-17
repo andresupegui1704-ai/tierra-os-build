@@ -1442,6 +1442,63 @@ async def tierra_toggle_option(
     }
 
 
+# ---------- Tierra OS — Ingredient ID sync (Lark `Ingredienti` table) ----------
+@api.post("/tierra/ingredients/sync")
+async def tierra_ingredients_sync(
+    payload: dict,
+    _: bool = Depends(_require_tierra_token),
+):
+    """Sync ingredient availability from Tierra OS Lark `Ingredienti` table.
+
+    Body:
+    {
+        "ingredient_id": "ing_riso_bianco",     # required
+        "nome": "Riso Bianco",                  # optional, fallback match
+        "categoria": "Base",                    # optional, ignored
+        "disponibile": false,                   # required
+        "timestamp": "2026-05-17T20:30:00Z"     # optional
+    }
+
+    Resolution order:
+    1. Look up `ingredient_id` in INGREDIENT_TO_SITE_NAME → site option name
+    2. Else, use `nome` as fallback
+    3. Apply same cascade logic of /tierra/options/availability
+    """
+    from ingredient_mapping import INGREDIENT_TO_SITE_NAME
+    ing_id = (payload.get("ingredient_id") or "").strip()
+    nome = (payload.get("nome") or "").strip()
+    if not ing_id and not nome:
+        raise HTTPException(status_code=400, detail="ingredient_id o nome richiesto")
+    if "disponibile" not in payload:
+        raise HTTPException(status_code=400, detail="disponibile richiesto")
+
+    site_name = INGREDIENT_TO_SITE_NAME.get(ing_id) or nome
+    if not site_name:
+        raise HTTPException(
+            status_code=404,
+            detail=f"ingredient_id '{ing_id}' non mappato e nome non fornito",
+        )
+
+    available = bool(payload["disponibile"])
+    # Reuse the existing toggle logic
+    result = await tierra_toggle_option(
+        {"option_name": site_name, "available": available},
+        _=True,
+    )
+    result["ingredient_id"] = ing_id
+    result["resolved_site_name"] = site_name
+    return result
+
+
+@api.get("/tierra/ingredients/mapping")
+async def tierra_ingredients_mapping(_: bool = Depends(_require_tierra_token)):
+    """Return the current Lark ingredient_id → site option name mapping.
+    Useful for Tierra OS to debug naming alignment.
+    """
+    from ingredient_mapping import INGREDIENT_TO_SITE_NAME
+    return {"ok": True, "count": len(INGREDIENT_TO_SITE_NAME), "mapping": INGREDIENT_TO_SITE_NAME}
+
+
 @api.get("/tierra/options")
 async def tierra_list_options(_: bool = Depends(_require_tierra_token)):
     """Return all unique customization options across the menu, with current availability.
