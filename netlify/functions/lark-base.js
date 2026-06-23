@@ -27,7 +27,7 @@ async function getLarkToken() {
   if (tokenCache.value && Date.now() < tokenCache.expiresAt - 60_000) {
     return tokenCache.value;
   }
-  const res = await fetch("https://open.larksuite.com/open-apis/auth/v3/app_access_token/internal", {
+  const res = await fetch("https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -36,9 +36,9 @@ async function getLarkToken() {
     }),
   });
   const data = await res.json();
-  if (!data.app_access_token) throw new Error("Lark auth failed: " + JSON.stringify(data));
+  if (!data.tenant_access_token) throw new Error("Lark auth failed: " + JSON.stringify(data));
   tokenCache = {
-    value: data.app_access_token,
+    value: data.tenant_access_token,
     expiresAt: Date.now() + ((data.expire || 7200) * 1000),
   };
   return tokenCache.value;
