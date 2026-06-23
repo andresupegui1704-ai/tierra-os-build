@@ -172,7 +172,7 @@ export const handler = async (event) => {
             default_view_name: "Griglia",
             fields: fields.map(([field_name, field_type]) => ({
               field_name,
-              field_type: parseInt(field_type),
+              type: parseInt(field_type),
             })),
           },
         };
