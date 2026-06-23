@@ -71,7 +71,7 @@ export const handler = async (event) => {
     };
   }
 
-  const baseToken = process.env.LARK_BASE_TOKEN;
+  const baseToken = process.env.LARK_BASE_TOKEN || process.env.LARK_BASE_ID;
   if (!baseToken) {
     return {
       statusCode: 500,
