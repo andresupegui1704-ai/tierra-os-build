@@ -2907,7 +2907,7 @@ function Tasks({tasks,setTasks,user}) {
 // ═══════════════════════════════════════════════════════════════════════════
 // CHIUSURA CASSA
 // ═══════════════════════════════════════════════════════════════════════════
-function Chiusura() {
+function Chiusura({user}) {
   const [f,setF] = useState({cash:"",pos:"",ticket:"",fatCash:"",fatPos:"",stripe:"",commStr:"",cashZ:"",scontrZ:"",contFis:"",note:""});
   // Fondo cassa per taglio
   const [fondo,setFondo] = useState({t50:0,t20:0,t10:0,t5:0,t2:0,t1:0,c50:0,c20:0,c10:0});
@@ -2953,8 +2953,21 @@ function Chiusura() {
     try{
       const tok=await larkToken();
       if(!tok)throw new Error("Token non valido");
+      // 1) Invia card notifica su Lark
       const res=await larkSend(tok,buildClosureCard({cash:n(f.cash),pos:n(f.pos),stripe:n(f.stripe)-n(f.commStr),totDay,totZ,contanti:n(f.contFis),note:f.note}));
       if(res.code&&res.code!==0)throw new Error(res.msg||"Errore Lark");
+      // 2) Salva record su Lark Base (tabella Chiusure Cassa)
+      const operatore = user?.name || user?.email || "Admin";
+      await dbSave("Chiusure Cassa", {
+        "Data": todayStr(),
+        "Cash": n(f.cash),
+        "POS": n(f.pos),
+        "Stripe": stripeNet,
+        "TOT DAY": totDay,
+        "Scostamento": scost,
+        "Operatore": operatore,
+        "Note": f.note || "",
+      });
       setStatus("success");
     }catch(e){setStatus("error");setErrMsg(e.message);}
   };
@@ -4847,7 +4860,7 @@ export default function App() {
         {view==="tasks"     && <Tasks tasks={tasks} setTasks={setTasks} user={user}/>}
         {view==="ordini"    && <OrdiniFornitori fornitori={fornitori} setFornitori={setFornitori} ordini={ordini} setOrdini={setOrdini} user={user}/>}
         {view==="magazzino" && isAdmin(user) && <Magazzino magazzino={magazzino} setMagazzino={setMagazzino}/>}
-        {view==="chiusura"  && isAdmin(user) && <Chiusura/>}
+        {view==="chiusura"  && isAdmin(user) && <Chiusura user={user}/>}
         {view==="fatture"   && isAdmin(user) && <Fatture invoices={invoices} setInvoices={setInvoices}/>}
         {view==="vendite"   && isAdmin(user) && <Vendite sales={sales} setSales={setSales}/>}
 
