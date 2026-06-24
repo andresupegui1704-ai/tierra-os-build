@@ -1455,13 +1455,19 @@ function Login({onLogin}) {
 }
 
 // ─── DB SETUP BUTTON ─────────────────────────────────────────────────────────
-function DbSetupBtn() {
+function DbSetupBtn({ onDone }) {
   const [status, setStatus] = useState("idle");
   const run = async () => {
     setStatus("loading");
     const ok = await setupTables();
-    setStatus(ok ? "done" : "error");
-    setTimeout(() => setStatus("idle"), 3000);
+    if (ok) {
+      setStatus("done");
+      localStorage.setItem("tierra_db_ready", "true");
+      setTimeout(() => onDone && onDone(), 1500);
+    } else {
+      setStatus("error");
+      setTimeout(() => setStatus("idle"), 3000);
+    }
   };
   return (
     <button onClick={run} disabled={status==="loading"} style={{
@@ -1548,14 +1554,14 @@ function Dashboard({user,tasks,invoices,sales,menuCatalog,fornitori,ordini,setVi
         </Card>
       )}
 
-      {isAdmin(user) && (
+      {isAdmin(user) && !localStorage.getItem("tierra_db_ready") && (
         <Card style={{marginBottom:12,border:`1px solid ${C.lark}33`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
               <div style={{fontSize:13,fontWeight:600,color:C.lark}}>🗄 Lark Base Database</div>
               <div style={{fontSize:11,color:C.muted,marginTop:2}}>Inizializza le tabelle al primo avvio</div>
             </div>
-            <DbSetupBtn/>
+            <DbSetupBtn onDone={() => { window.location.reload(); }}/>
           </div>
         </Card>
       )}
